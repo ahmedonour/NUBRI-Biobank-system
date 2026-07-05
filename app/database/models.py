@@ -1,0 +1,172 @@
+import json
+import uuid
+from datetime import datetime
+from .connection import DatabaseConnection
+
+
+class ColumnDefinition:
+    def __init__(self, db=None):
+        self.db = db or DatabaseConnection.get_instance()
+        self.conn = self.db.get_connection()
+
+    def get_all(self):
+        cursor = self.conn.execute(
+            "SELECT * FROM column_definitions WHERE is_active = 1 ORDER BY display_order"
+        )
+        return [dict(row) for row in cursor.fetchall()]
+
+    def add(self, column_name, column_type="TEXT", is_required=False):
+        cursor = self.conn.execute("SELECT COALESCE(MAX(display_order), -1) + 1 FROM column_definitions")
+        next_order = cursor.fetchone()[0]
+        self.conn.execute(
+            "INSERT INTO column_definitions (column_name, column_type, display_order, is_required) VALUES (?, ?, ?, ?)",
+            (column_name, column_type, next_order, 1 if is_required else 0)
+        )
+        self.conn.commit()
+
+    def update(self, col_id, column_name=None, column_type=None, is_required=None, display_order=None):
+        fields = []
+        values = []
+        if column_name is not None:
+            fields.append("column_name = ?")
+            values.append(column_name)
+        if column_type is not None:
+            fields.append("column_type = ?")
+            values.append(column_type)
+        if is_required is not None:
+            fields.append("is_required = ?")
+            values.append(1 if is_required else 0)
+        if display_order is not None:
+            fields.append("display_order = ?")
+            values.append(display_order)
+        if fields:
+            values.append(col_id)
+            self.conn.execute(
+                f"UPDATE column_definitions SET {', '.join(fields)} WHERE id = ?",
+                values
+            )
+            self.conn.commit()
+
+    def delete(self, col_id):
+        self.conn.execute("UPDATE column_definitions SET is_active = 0 WHERE id = ?", (col_id,))
+        self.conn.commit()
+
+    def reorder(self, ordered_ids):
+        for idx, col_id in enumerate(ordered_ids):
+            self.conn.execute(
+                "UPDATE column_definitions SET display_order = ? WHERE id = ?",
+                (idx, col_id)
+            )
+        self.conn.commit()
+
+
+class SpecimenModel:
+    def __init__(self, db=None):
+        self.db = db or DatabaseConnection.get_instance()
+        self.conn = self.db.get_connection()
+
+    def generate_qr_code(self):
+        return str(uuid.uuid4()).replace("-", "")[:16].upper()
+
+    def create(self, custom_fields_dict):
+        qr_code = self.generate_qr_code()
+        self.conn.execute(
+            "INSERT INTO specimens (qr_code, custom_fields) VALUES (?, ?)",
+            (qr_code, json.dumps(custom_fields_dict))
+        )
+        self.conn.commit()
+        return qr_code
+
+    def get_by_qr(self, qr_code):
+        cursor = self.conn.execute(
+            "SELECT * FROM specimens WHERE qr_code = ?",
+            (qr_code,)
+        )
+        row = cursor.fetchone()
+        if row:
+            result = dict(row)
+            result["custom_fields"] = json.loads(result["custom_fields"])
+            return result
+        return None
+
+    def get_by_id(self, specimen_id):
+        cursor = self.conn.execute(
+            "SELECT * FROM specimens WHERE id = ?",
+            (specimen_id,)
+        )
+        row = cursor.fetchone()
+        if row:
+            result = dict(row)
+            result["custom_fields"] = json.loads(result["custom_fields"])
+            return result
+        return None
+
+    def update(self, specimen_id, custom_fields_dict):
+        self.conn.execute(
+            "UPDATE specimens SET custom_fields = ?, updated_at = ? WHERE id = ?",
+            (json.dumps(custom_fields_dict), datetime.now().isoformat(), specimen_id)
+        )
+        self.conn.commit()
+
+    def search(self, query, column_name=None):
+        like_query = f"%{query}%"
+        if column_name:
+            sql = """
+                SELECT * FROM specimens
+                WHERE json_extract(custom_fields, ?) LIKE ?
+                ORDER BY created_at DESC
+            """
+            field_path = f"$.\"{column_name}\""
+            cursor = self.conn.execute(sql, (field_path, like_query))
+        else:
+            sql = """
+                SELECT * FROM specimens
+                WHERE qr_code LIKE ?
+                OR custom_fields LIKE ?
+                ORDER BY created_at DESC
+            """
+            cursor = self.conn.execute(sql, (like_query, like_query))
+        results = []
+        for row in cursor.fetchall():
+            result = dict(row)
+            result["custom_fields"] = json.loads(result["custom_fields"])
+            results.append(result)
+        return results
+
+    def get_all(self, limit=100, offset=0):
+        cursor = self.conn.execute(
+            "SELECT * FROM specimens ORDER BY created_at DESC LIMIT ? OFFSET ?",
+            (limit, offset)
+        )
+        results = []
+        for row in cursor.fetchall():
+            result = dict(row)
+            result["custom_fields"] = json.loads(result["custom_fields"])
+            results.append(result)
+        return results
+
+    def count(self):
+        cursor = self.conn.execute("SELECT COUNT(*) FROM specimens")
+        return cursor.fetchone()[0]
+
+
+class SettingsModel:
+    def __init__(self, db=None):
+        self.db = db or DatabaseConnection.get_instance()
+        self.conn = self.db.get_connection()
+
+    def get(self, key, default=None):
+        cursor = self.conn.execute("SELECT value FROM settings WHERE key = ?", (key,))
+        row = cursor.fetchone()
+        return row["value"] if row else default
+
+    def set(self, key, value):
+        self.conn.execute(
+            "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+            (key, str(value))
+        )
+        self.conn.commit()
+
+    def get_all(self):
+        cursor = self.conn.execute("SELECT * FROM settings")
+        return {row["key"]: row["value"] for row in cursor.fetchall()}

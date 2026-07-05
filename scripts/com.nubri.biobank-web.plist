@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.nubri.biobank-web</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/local/bin/python3</string>
+        <string>-m</string>
+        <string>app.web.server_headless</string>
+        <string>--db=/Users/{{USER}}/Biobank/biobank.db</string>
+        <string>--port=5000</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>WorkingDirectory</key>
+    <string>/Users/{{USER}}/Biobank</string>
+    <key>StandardOutPath</key>
+    <string>/Users/{{USER}}/Biobank/logs/biobank-web.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/{{USER}}/Biobank/logs/biobank-web.err</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin</string>
+    </dict>
+</dict>
+</plist>

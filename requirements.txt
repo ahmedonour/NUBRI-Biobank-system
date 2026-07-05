@@ -1,0 +1,28 @@
+# Core
+PyQt5>=5.15.0
+
+# Database
+# (sqlite3 is built-in)
+
+# QR Code generation
+qrcode[pil]>=7.3.0
+
+# QR Code scanning (desktop camera)
+opencv-python>=4.5.0
+pyzbar>=0.1.9
+
+# Xprinter Thermal Printer (ESC/POS)
+python-escpos>=3.0
+Pillow>=9.0.0
+
+# PocketBase authentication (REST API via requests)
+# Download & run PocketBase from https://pocketbase.io
+
+# Web preview server
+Flask>=2.0.0
+requests>=2.25.0
+
+# Google Drive backup
+google-api-python-client>=2.0.0
+google-auth-httplib2>=0.1.0
+google-auth-oauthlib>=0.4.0

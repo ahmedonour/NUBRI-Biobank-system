@@ -15,11 +15,7 @@ import sys
 import subprocess
 import platform
 import shutil
-import zipfile
-import tempfile
 import json
-import urllib.request
-import urllib.error
 from pathlib import Path
 
 # ── Resolve resource path ──────────────────────────────────────────────
@@ -35,8 +31,6 @@ RESOURCE_DIR = _resource_path()
 
 APP_NAME = "NUBRI Biobank"
 INSTALL_DIR = Path.home() / "Biobank"
-PB_DIR = INSTALL_DIR / "pocketbase"
-PB_DATA_DIR = INSTALL_DIR / "pb_data"
 LOGS_DIR = INSTALL_DIR / "logs"
 CREDENTIALS_DIR = INSTALL_DIR / "credentials"
 DB_PATH = INSTALL_DIR / "biobank.db"
@@ -160,7 +154,7 @@ class WelcomePage(QWizardPage):
             "<ul>"
             "<li>Install Python dependencies</li>"
             "<li>Copy application files</li>"
-            "<li>Download &amp; configure PocketBase server</li>"
+            "<li>Set up the SQLite database</li>"
             "<li>Create desktop shortcut</li>"
             "</ul>"
             f"<p><b>Install target:</b> {INSTALL_DIR}</p>"
@@ -183,11 +177,6 @@ class ConfigPage(QWizardPage):
 
         form = QFormLayout()
 
-        self.pb_port = QSpinBox()
-        self.pb_port.setRange(1024, 65535)
-        self.pb_port.setValue(8090)
-        form.addRow("PocketBase Port:", self.pb_port)
-
         self.web_port = QSpinBox()
         self.web_port.setRange(1024, 65535)
         self.web_port.setValue(5000)
@@ -199,14 +188,6 @@ class ConfigPage(QWizardPage):
         self.desktop_cb = QCheckBox("Create desktop shortcut")
         self.desktop_cb.setChecked(True)
         layout.addWidget(self.desktop_cb)
-
-        self.autostart_cb = QCheckBox(
-            "Auto-start PocketBase on login" +
-            (" (macOS only)" if SYSTEM != "Darwin" else "")
-        )
-        self.autostart_cb.setChecked(SYSTEM == "Darwin")
-        self.autostart_cb.setEnabled(SYSTEM == "Darwin")
-        layout.addWidget(self.autostart_cb)
 
         self.install_printer_cb = QCheckBox("Install ESC/POS printer support (recommended)")
         self.install_printer_cb.setChecked(True)
@@ -269,7 +250,7 @@ class InstallPage(QWizardPage):
 
         # 2. Create directories
         def mkdirs():
-            for d in [target, PB_DIR, PB_DATA_DIR, LOGS_DIR, CREDENTIALS_DIR]:
+            for d in [target, LOGS_DIR, CREDENTIALS_DIR]:
                 d.mkdir(parents=True, exist_ok=True)
 
         tasks.append(("Creating directories", mkdirs))
@@ -307,46 +288,10 @@ class InstallPage(QWizardPage):
 
         tasks.append(("Copying application files", copy_app))
 
-        # 5. Download PocketBase
-        def download_pb():
-            pb_bin = PB_DIR / ("pocketbase.exe" if SYSTEM == "Windows" else "pocketbase")
-            if pb_bin.exists():
-                return
-
-            os_name = platform.system().lower()
-            arch = platform.machine().lower()
-            if arch in ("x86_64", "amd64"):
-                arch = "amd64"
-            elif arch in ("aarch64", "arm64"):
-                arch = "arm64"
-            else:
-                raise RuntimeError(f"Unsupported architecture: {arch}")
-
-            if os_name == "windows":
-                ext = ".exe"
-            else:
-                ext = ""
-
-            url = (f"https://github.com/pocketbase/pocketbase/releases/latest/download/"
-                   f"pocketbase_{os_name}_{arch}.zip")
-
-            self.log.emit(f"    Downloading: {url}")
-            zip_path = tempfile.mktemp(suffix=".zip")
-            try:
-                urllib.request.urlretrieve(url, zip_path)
-                with zipfile.ZipFile(zip_path, "r") as zf:
-                    zf.extractall(str(PB_DIR))
-                if SYSTEM != "Windows":
-                    pb_bin.chmod(0o755)
-            finally:
-                Path(zip_path).unlink(missing_ok=True)
-
-        tasks.append(("Downloading PocketBase", download_pb))
-
-        # 6. Create config file
+        # 5. Create config file
         def create_config():
             cfg = {
-                "pocketbase_url": f"http://127.0.0.1:{config.pb_port.value()}",
+
                 "web_port": str(config.web_port.value()),
                 "printer_backend": "network",
                 "printer_host": "192.168.1.100",
@@ -361,16 +306,15 @@ class InstallPage(QWizardPage):
 
         tasks.append(("Creating configuration file", create_config))
 
-        # 7. Setup auto-start (macOS LaunchAgents)
-        if SYSTEM == "Darwin" and config.autostart_cb.isChecked():
+        # 6. Setup auto-start for web server (macOS LaunchAgents)
+        if SYSTEM == "Darwin":
             def setup_autostart():
                 launch_agents = Path.home() / "Library" / "LaunchAgents"
                 launch_agents.mkdir(parents=True, exist_ok=True)
 
-                for plist_name in ("com.nubri.pocketbase.plist", "com.nubri.biobank-web.plist"):
-                    src = RESOURCE_DIR / "scripts" / plist_name
-                    if not src.exists():
-                        continue
+                plist_name = "com.nubri.biobank-web.plist"
+                src = RESOURCE_DIR / "scripts" / plist_name
+                if src.exists():
                     dest = launch_agents / plist_name
                     content = src.read_text().replace("{{USER}}", os.environ.get("USER", ""))
                     dest.write_text(content)
@@ -378,7 +322,7 @@ class InstallPage(QWizardPage):
 
             tasks.append(("Setting up auto-start (macOS)", setup_autostart))
 
-        # 8. Create desktop / start shortcut
+        # 7. Create desktop / start shortcut
         if config.desktop_cb.isChecked():
             def create_shortcut():
                 python = _check_python()[1] or sys.executable or "python3"
@@ -445,11 +389,10 @@ class FinishPage(QWizardPage):
             "<hr>"
             "<h4>Next Steps:</h4>"
             "<ol>"
-            "<li>Open PocketBase Admin UI at <b>http://127.0.0.1:8090/_/</b></li>"
-            "<li>Create an admin account, then add users in <b>Collections → Users</b></li>"
             f"<li>Run the app: double-click the desktop shortcut or:<br>"
             f"    <code>python3 \"{INSTALL_DIR / 'main.py'}\"</code></li>"
-            "<li>Sign in with the PocketBase user credentials</li>"
+            "<li>Create a new account from the <b>Sign In</b> screen (click 'Create an account')</li>"
+            "<li>Sign in and start creating specimen labels</li>"
             "</ol>"
             "<hr>"
         )
@@ -484,10 +427,10 @@ class InstallerWizard(QWizard):
         self.addPage(self.install_page)
         self.addPage(self.finish_page)
 
-        self.setStyleSheet("""
-            QWizard { background-color: #fafafa; }
-            QWizardPage { background-color: white; }
-            QLabel { color: #333; }
+        from app.gui.theme import DARK_QSS
+        self.setStyleSheet(DARK_QSS + """
+            QWizard { background-color: #1e1e1e; }
+            QWizardPage { background-color: #1e1e1e; }
         """)
 
 

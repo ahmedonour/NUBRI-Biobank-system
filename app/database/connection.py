@@ -87,7 +87,27 @@ class DatabaseConnection:
             INSERT OR IGNORE INTO settings (key, value) VALUES ('web_port', '5000');
             INSERT OR IGNORE INTO settings (key, value) VALUES ('backup_enabled', 'false');
             INSERT OR IGNORE INTO settings (key, value) VALUES ('backup_interval_hours', '24');
-            INSERT OR IGNORE INTO settings (key, value) VALUES ('pocketbase_url', 'http://127.0.0.1:8090');
+
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                email TEXT UNIQUE NOT NULL,
+                password_hash TEXT NOT NULL,
+                salt TEXT NOT NULL,
+                name TEXT DEFAULT '',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS sessions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                token TEXT UNIQUE NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                expires_at TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(id)
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token);
+            CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
         """)
         self.conn.commit()
 

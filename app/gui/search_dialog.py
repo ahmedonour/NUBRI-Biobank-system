@@ -20,29 +20,22 @@ class SearchWidget(QWidget):
         layout = QVBoxLayout(self)
 
         title = QLabel("Search & Scan Specimens")
-        title.setStyleSheet("font-size: 18px; font-weight: bold; color: #1a73e8; margin-bottom: 10px;")
+        title.setStyleSheet("font-size: 18px; font-weight: bold; color: #4da6ff; margin-bottom: 10px;")
         layout.addWidget(title)
 
         search_layout = QHBoxLayout()
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("Search by QR code or any field value...")
-        self.search_input.setStyleSheet("""
-            QLineEdit {
-                padding: 10px 16px; border: 2px solid #ddd;
-                border-radius: 8px; font-size: 14px;
-            }
-            QLineEdit:focus { border-color: #1a73e8; }
-        """)
         self.search_input.returnPressed.connect(self._search)
         search_layout.addWidget(self.search_input)
 
         self.search_btn = QPushButton("Search")
         self.search_btn.setStyleSheet("""
             QPushButton {
-                background-color: #1a73e8; color: white; padding: 10px 20px;
+                background-color: #4da6ff; color: white; padding: 10px 20px;
                 border: none; border-radius: 6px; font-weight: bold;
             }
-            QPushButton:hover { background-color: #1557b0; }
+            QPushButton:hover { background-color: #3d8bd4; }
         """)
         self.search_btn.clicked.connect(self._search)
         search_layout.addWidget(self.search_btn)
@@ -50,10 +43,10 @@ class SearchWidget(QWidget):
         self.scan_btn = QPushButton("Scan QR from Camera")
         self.scan_btn.setStyleSheet("""
             QPushButton {
-                background-color: #27ae60; color: white; padding: 10px 20px;
+                background-color: #4caf50; color: white; padding: 10px 20px;
                 border: none; border-radius: 6px; font-weight: bold;
             }
-            QPushButton:hover { background-color: #219a52; }
+            QPushButton:hover { background-color: #43a047; }
         """)
         self.scan_btn.clicked.connect(self._scan_qr)
         search_layout.addWidget(self.scan_btn)
@@ -69,39 +62,19 @@ class SearchWidget(QWidget):
         self.results_table.setSelectionBehavior(QTableWidget.SelectRows)
         self.results_table.setSelectionMode(QTableWidget.SingleSelection)
         self.results_table.setEditTriggers(QTableWidget.NoEditTriggers)
-        self.results_table.setStyleSheet("""
-            QTableWidget {
-                border: 1px solid #ddd; border-radius: 6px;
-                gridline-color: #f0f0f0;
-            }
-            QHeaderView::section {
-                background-color: #f8f9fa; padding: 8px;
-                border: none; border-bottom: 2px solid #ddd;
-                font-weight: bold;
-            }
-        """)
         self.results_table.itemDoubleClicked.connect(self._show_detail)
         layout.addWidget(self.results_table)
 
         detail_group = QGroupBox("Detail View")
-        detail_group.setStyleSheet("""
-            QGroupBox {
-                font-weight: bold; border: 1px solid #ddd;
-                border-radius: 8px; margin-top: 10px; padding-top: 15px;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin; left: 10px; padding: 0 5px;
-            }
-        """)
         detail_layout = QVBoxLayout(detail_group)
 
         self.detail_label = QLabel("Double-click a row or scan a QR code to see details.")
-        self.detail_label.setStyleSheet("color: #666; font-style: italic;")
+        self.detail_label.setStyleSheet("color: #9e9e9e; font-style: italic;")
         detail_layout.addWidget(self.detail_label)
 
         self.detail_text = QTextEdit()
         self.detail_text.setReadOnly(True)
-        self.detail_text.setStyleSheet("border: none; background: transparent; font-size: 13px;")
+        self.detail_text.setStyleSheet("font-size: 13px;")
         detail_layout.addWidget(self.detail_text)
 
         layout.addWidget(detail_group)

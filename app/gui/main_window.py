@@ -4,15 +4,14 @@ from PyQt5.QtWidgets import (
     QMainWindow, QTabWidget, QStatusBar,
     QLabel, QAction, QMessageBox, QApplication
 )
-from PyQt5.QtCore import Qt, QTimer
 from .label_form import LabelFormWidget
 from .search_dialog import SearchWidget
+from .database_view import DatabaseViewWidget
 from .schema_manager import SchemaManagerWidget
 from .settings_widget import SettingsWidget
 from .login_dialog import LoginDialog
 from ..web import WebServer
 from ..database.connection import DatabaseConnection
-from ..auth.pocketbase_client import PocketBaseAuth
 
 
 class MainWindow(QMainWindow):
@@ -25,11 +24,6 @@ class MainWindow(QMainWindow):
 
         self.setWindowTitle("NUBRI Biobank Label System")
         self.setMinimumSize(900, 700)
-        self.setStyleSheet("""
-            QMainWindow {
-                background-color: #fafafa;
-            }
-        """)
 
         if not self._authenticate():
             sys.exit(0)
@@ -39,7 +33,7 @@ class MainWindow(QMainWindow):
         self._start_web_server()
 
     def _authenticate(self):
-        dialog = LoginDialog(self)
+        dialog = LoginDialog(db=self.db, parent=self)
         if dialog.exec_() == LoginDialog.Accepted:
             self.auth = dialog.auth
             return True
@@ -47,45 +41,21 @@ class MainWindow(QMainWindow):
 
     def _setup_ui(self):
         self.tabs = QTabWidget()
-        self.tabs.setStyleSheet("""
-            QTabWidget::pane {
-                border: 1px solid #ddd;
-                border-radius: 6px;
-                background: white;
-                padding: 10px;
-            }
-            QTabBar::tab {
-                padding: 10px 20px;
-                margin-right: 2px;
-                background: #f0f0f0;
-                border: 1px solid #ddd;
-                border-bottom: none;
-                border-top-left-radius: 6px;
-                border-top-right-radius: 6px;
-                font-weight: bold;
-            }
-            QTabBar::tab:selected {
-                background: white;
-                border-bottom: 2px solid #1a73e8;
-                color: #1a73e8;
-            }
-            QTabBar::tab:hover {
-                background: #e8f0fe;
-            }
-        """)
 
         self.label_form = LabelFormWidget(self.db)
         self.search_widget = SearchWidget(self.db)
+        self.database_view = DatabaseViewWidget(self.db)
         self.schema_manager = SchemaManagerWidget(self.db)
         self.settings_widget = SettingsWidget(self.db, self.db_path)
 
         self.tabs.addTab(self.label_form, "Create Label")
         self.tabs.addTab(self.search_widget, "Search / Scan")
+        self.tabs.addTab(self.database_view, "Database")
         self.tabs.addTab(self.schema_manager, "Manage Columns")
         self.tabs.addTab(self.settings_widget, "Settings")
 
         self.label_form.label_created.connect(self._on_label_created)
-
+        self.label_form.label_created.connect(lambda _: self.database_view._load())
         self.setCentralWidget(self.tabs)
 
         self.status_bar = QStatusBar()
@@ -98,25 +68,22 @@ class MainWindow(QMainWindow):
         if self.auth and self.auth.is_authenticated:
             name = self.auth.get_user_name()
             self.user_label = QLabel(f"Signed in as: {name}")
-            self.user_label.setStyleSheet("color: #27ae60; font-weight: bold; padding: 0 10px;")
+            self.user_label.setStyleSheet("color: #4caf50; font-weight: bold; padding: 0 10px;")
             self.status_bar.addPermanentWidget(self.user_label)
         else:
             self.user_label = QLabel("Not signed in")
-            self.user_label.setStyleSheet("color: #e74c3c; padding: 0 10px;")
+            self.user_label.setStyleSheet("color: #ef5350; padding: 0 10px;")
             self.status_bar.addPermanentWidget(self.user_label)
 
     def _setup_menu(self):
         menubar = self.menuBar()
 
         file_menu = menubar.addMenu("File")
-
         signout_action = QAction("Sign Out", self)
         signout_action.setShortcut("Ctrl+Shift+S")
         signout_action.triggered.connect(self._sign_out)
         file_menu.addAction(signout_action)
-
         file_menu.addSeparator()
-
         exit_action = QAction("Exit", self)
         exit_action.setShortcut("Ctrl+Q")
         exit_action.triggered.connect(self.close)
@@ -158,17 +125,10 @@ class MainWindow(QMainWindow):
             from ..database.models import SettingsModel
             settings = SettingsModel(self.db)
             port = int(settings.get("web_port", "5000"))
-            self.web_server = WebServer(
-                self.db,
-                port=port,
-                auth=self.auth
-            )
+            self.web_server = WebServer(self.db, port=port, auth=self.auth)
             self.web_server.start()
-            base_url = self.auth.base_url.rstrip("/") if self.auth else "http://127.0.0.1:8090"
             ip = self._get_local_ip()
-            self.status_label.setText(
-                f"Web: http://{ip}:{port}  |  PocketBase: {base_url}"
-            )
+            self.status_label.setText(f"Web preview: http://{ip}:{port}")
         except Exception as e:
             self.status_label.setText(f"Web server failed: {str(e)}")
 
@@ -188,6 +148,7 @@ class MainWindow(QMainWindow):
 
     def _refresh_all(self):
         self.label_form.refresh()
+        self.database_view._load()
         self.status_label.setText("Forms refreshed")
 
     def _backup_now(self):
@@ -196,11 +157,10 @@ class MainWindow(QMainWindow):
             backup = GoogleDriveBackup(self.db_path)
             name = backup.backup()
             QMessageBox.information(self, "Backup Complete", f"Backup saved as: {name}")
-        except FileNotFoundError as e:
+        except FileNotFoundError:
             QMessageBox.warning(
                 self, "Credentials Missing",
-                "Please place your Google Drive client_secret.json in the credentials/ folder.\n"
-                "See Settings tab to configure."
+                "Place your Google Drive client_secret.json in the credentials/ folder."
             )
         except Exception as e:
             QMessageBox.critical(self, "Backup Failed", str(e))
@@ -209,10 +169,10 @@ class MainWindow(QMainWindow):
         QMessageBox.about(
             self, "About NUBRI Biobank Label System",
             "NUBRI Biobank Label System v1.0\n\n"
-            "A desktop application for generating and managing\n"
+            "Desktop application for generating and managing\n"
             "biobank specimen labels with QR codes.\n\n"
             "Features:\n"
-            "- PocketBase authentication\n"
+            "- SQLite user authentication\n"
             "- Customizable specimen fields\n"
             "- QR code generation & scanning\n"
             "- Xprinter thermal label printing\n"

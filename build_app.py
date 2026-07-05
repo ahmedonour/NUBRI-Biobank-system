@@ -53,7 +53,7 @@ def build_app():
 
     # Hidden imports for PyInstaller
     for mod in ["PIL", "PIL._tkinter_finder", "qrcode", "escpos", "flask", "requests",
-                 "googleapiclient", "pyzbar", "cv2", "pocketbase"]:
+                 "googleapiclient", "pyzbar", "cv2"]:
         cmd.extend(["--hidden-import", mod])
 
     cmd.append(APP_ENTRY)

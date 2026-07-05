@@ -15,6 +15,7 @@ via a mobile-friendly web interface.
 - [Detailed Installation](#detailed-installation)
 - [GUI Installer](#gui-installer)
 - [Build .app Bundle (macOS)](#build-app-bundle-macos)
+- [Build Standalone Installer](#build-standalone-installer)
 - [Configuration](#configuration)
 - [Usage Guide](#usage-guide)
 - [Auto-Start on Boot](#auto-start-on-boot)
@@ -32,10 +33,11 @@ via a mobile-friendly web interface.
 | **Xprinter Printing** | ESC/POS thermal label printing via network, USB, or serial |
 | **Desktop QR Scanning** | Scan QR codes using a webcam (OpenCV + pyzbar) |
 | **Mobile Web Preview** | Responsive web interface with HTML5 camera QR scanning |
-| **PocketBase Auth** | Secure sign in / sign out for both desktop and web |
+| **SQLite Auth** | Built-in sign in / sign up — no external server needed |
+| **Password Hashing** | Passwords safely hashed with SHA-256 + salt |
 | **Fast Search** | SQLite with WAL mode, indexed columns, JSON1 queries |
 | **Google Drive Backup** | Automatic or manual database backup to Google Drive |
-| **Auto-Start** | Services start automatically on boot (macOS LaunchAgents) |
+| **Auto-Start** | Web server auto-starts on boot (macOS LaunchAgents) |
 | **GUI Installer** | Step-by-step setup wizard for zero-config installation |
 
 ---
@@ -43,29 +45,30 @@ via a mobile-friendly web interface.
 ## System Architecture
 
 ```
-┌─────────────────────────────────────────────────────┐
-│                   Desktop App (PyQt5)                │
-│  ┌──────────┐  ┌──────────┐  ┌────────┐  ┌───────┐ │
-│  │ Create   │  │ Search/  │  │Manage  │  │Settings│ │
-│  │ Label    │  │ Scan     │  │Columns │  │       │ │
-│  └────┬─────┘  └────┬─────┘  └────┬───┘  └───┬───┘ │
-│       │              │              │           │     │
-├───────┴──────────────┴──────────────┴───────────┘────┤
-│                    Core Modules                       │
-│  ┌──────────┐  ┌──────────┐  ┌────────┐  ┌────────┐ │
-│  │ Database │  │   QR     │  │Printer │  │  Auth  │ │
-│  │ (SQLite) │  │ (qrcode) │  │(ESC/POS)│  │(Pocket │ │
-│  │          │  │ (pyzbar) │  │        │  │ Base)  │ │
-│  └──────────┘  └──────────┘  └────────┘  └────────┘ │
-└──────────────────────┬───────────────────────────────┘
-                       │
-        ┌──────────────┴──────────────┐
-        │              │              │
-┌───────▼──────┐ ┌─────▼──────┐ ┌────▼──────┐
-│  PocketBase  │ │   Flask    │ │  Google   │
-│  Auth Server │ │ Web Server │ │ Drive API │
-│  :8090       │ │ :5000      │ │ (Backup)  │
-└──────────────┘ └────────────┘ └───────────┘
+┌─────────────────────────────────────────────────────────┐
+│                   Desktop App (PyQt5)                    │
+│  ┌──────────┐  ┌──────────┐  ┌────────┐  ┌───────────┐ │
+│  │ Create   │  │ Search/  │  │Manage  │  │ Settings  │ │
+│  │ Label    │  │ Scan     │  │Columns │  │           │ │
+│  └────┬─────┘  └────┬─────┘  └────┬───┘  └─────┬─────┘ │
+│       │              │              │            │       │
+├───────┴──────────────┴──────────────┴────────────┴──────┤
+│                    Core Modules                         │
+│  ┌──────────┐  ┌──────────┐  ┌────────┐  ┌──────────┐ │
+│  │ Database │  │   QR     │  │Printer │  │  Auth    │ │
+│  │ (SQLite) │  │ (qrcode) │  │(ESC/POS)│  │(SQLite) │ │
+│  │          │  │ (pyzbar) │  │        │  │(hashed) │ │
+│  └────┬─────┘  └──────────┘  └────────┘  └────┬─────┘ │
+│       │                                        │       │
+└───────┴────────────────────────────────────────┴───────┘
+                │                              │
+        ┌───────▼──────┐              ┌────────▼───────┐
+        │   SQLite DB  │              │   Flask Web    │
+        │  biobank.db  │              │   Server :5000 │
+        │  (data +     │              │  (mobile QR    │
+        │   users +    │              │   lookup)      │
+        │   sessions)  │              └────────────────┘
+        └──────────────┘
 ```
 
 ---
@@ -93,16 +96,15 @@ All dependencies are listed in `requirements.txt`:
 | `python-escpos` | >=3.0 | Xprinter thermal printer ESC/POS protocol |
 | `Pillow` | >=9.0.0 | Image handling for labels |
 | `Flask` | >=2.0.0 | Web preview server |
-| `requests` | >=2.25.0 | HTTP client (PocketBase API, web) |
+| `requests` | >=2.25.0 | HTTP client |
 | `google-api-python-client` | >=2.0.0 | Google Drive backup |
 | `google-auth-httplib2` | >=0.1.0 | Google Drive auth |
 | `google-auth-oauthlib` | >=0.4.0 | Google Drive OAuth |
 
-### External Services
+### External Services (optional)
 
 | Service | Purpose | How to Get It |
 |---------|---------|---------------|
-| **PocketBase** | Authentication server (auto-downloaded) | [pocketbase.io](https://pocketbase.io) — the app downloads it automatically |
 | **Google Drive API** | Database backup | Google Cloud Console → enable Drive API → download `client_secret.json` |
 
 ---
@@ -113,15 +115,14 @@ All dependencies are listed in `requirements.txt`:
 # 1. Install Python dependencies
 pip install -r requirements.txt
 
-# 2. Run the app (PocketBase auto-downloads and starts)
+# 2. Run the app
 python main.py
 
-# 3. Sign in with your PocketBase credentials
-#    (First time? Open http://127.0.0.1:8090/_/ to create an admin + users)
+# 3. Create your account
+#    Click "Create an account" on the login screen
 ```
 
-That's it. The app auto-downloads PocketBase if missing, starts it on port 8090,
-and opens the desktop login window.
+That's it. No external servers needed. Everything runs locally.
 
 ---
 
@@ -186,19 +187,10 @@ sudo dnf install zbar           # Fedora
 python main.py
 ```
 
-On first run, the app will:
-1. Download PocketBase binary for your platform (macOS ARM/x86, Windows, Linux)
-2. Start PocketBase server on `http://127.0.0.1:8090`
-3. Open the PocketBase Admin UI at `http://127.0.0.1:8090/_/` (do this manually in your browser)
-4. Show the desktop login dialog — sign in with a user from PocketBase
-
-### 7. Set Up PocketBase Users
-
-1. Open `http://127.0.0.1:8090/_/` in your browser
-2. Create an admin account (first-run setup)
-3. Go to **Collections → Users → Add record**
-4. Create user accounts (email + password) for each researcher
-5. Go back to the desktop app and sign in
+On first run:
+1. The app creates `biobank.db` (SQLite database) automatically
+2. A login dialog appears — click **Create an account** to register
+3. Sign in and start creating specimen labels
 
 ---
 
@@ -213,15 +205,13 @@ python installer.py
 
 The installer walks through:
 
-1. **Welcome** — overview of what will be installed
-2. **Configuration** — set ports, toggle auto-start, desktop shortcut, features
+1. **Welcome** — overview with system check (Python, pip)
+2. **Configuration** — set web port, toggle desktop shortcut, optional features
 3. **Installation** — live progress log showing:
    - Creating `~/Biobank/` directory structure
    - Installing Python dependencies
    - Copying application files
-   - Downloading PocketBase binary
    - Creating configuration file
-   - Setting up macOS LaunchAgents (auto-start)
    - Creating desktop shortcut
 4. **Finish** — success/failure status with next steps
 
@@ -248,13 +238,39 @@ The output appears in the `dist/` directory:
 
 ---
 
+## Build Standalone Installer
+
+Build the GUI installer into a single executable that can run on any machine
+without Python installed:
+
+```bash
+# Build for current platform
+python build_installer.py
+
+# Rebuild from scratch
+python build_installer.py --clean
+
+# Also create a ZIP
+python build_installer.py --zip
+```
+
+Produces:
+- **Windows**: `dist/NUBRI_Biobank_Installer.exe` (single file)
+- **macOS**: `dist/NUBRI_Biobank_Installer.app`
+- **Linux**: `dist/NUBRI_Biobank_Installer` (binary)
+
+The installer embeds all application files (app/, main.py, requirements.txt,
+scripts/) and PyQt5. The target machine only needs Python/pip to install
+dependencies (the installer checks this).
+
+---
+
 ## Configuration
 
 ### Settings Tab (within the app)
 
 | Section | Setting | Description |
 |---------|---------|-------------|
-| **PocketBase** | Server URL | URL of your PocketBase instance (default: `http://127.0.0.1:8090`) |
 | **Printer** | Connection Type | `network` (recommended), `usb`, or `serial` |
 | **Printer** | Host / IP | Printer IP address for network mode |
 | **Printer** | Port | Network port (default: `9100` — ESC/POS standard) |
@@ -267,8 +283,12 @@ The output appears in the `dist/` directory:
 ### Database
 
 The SQLite database is created automatically at `./biobank.db` (or the path
-specified with `--db`). The schema auto-migrates on first run with default
-columns (Sample ID, Sample Type, Patient Name, Collection Date, etc.).
+specified with `--db`). The schema auto-migrates on first run with:
+- `column_definitions` — dynamic field definitions
+- `specimens` — specimen data with JSON custom fields
+- `users` — user accounts (email + hashed password + salt)
+- `sessions` — web session tokens
+- `settings` — application configuration
 
 ---
 
@@ -316,7 +336,7 @@ The printer renders labels with:
 
 1. The web server starts automatically on app launch (default port: 5000)
 2. On your phone/tablet, open `http://<your-computer-ip>:5000`
-3. Sign in with the same PocketBase credentials
+3. Sign in or create an account from the web login page
 4. Use the HTML5 camera to scan QR codes and view details in real time
 
 To find your computer's IP:
@@ -334,46 +354,36 @@ hostname -I               # Linux
 4. Click **Backup Now** for an immediate backup, or enable automatic backups
 5. Backups are stored in a `BiobankBackups` folder in your Google Drive
 
-### 7. Sign Out
+### 7. Sign In / Sign Out
 
-- **Desktop**: File → Sign Out (returns to login dialog)
-- **Web**: Click "Sign Out" in the top-right corner (redirects to login page)
+- **Desktop**: App starts with a login dialog. Click **Create an account** to register,
+  or sign in with your email and password. Use **File → Sign Out** to switch users.
+- **Web**: Click **Sign Out** in the top-right corner, or use the login/signup
+  form on the `/login` page.
+- Passwords are hashed with SHA-256 + a random salt. They are never stored
+  in plain text.
 
 ---
 
 ## Auto-Start on Boot
 
-### Method 1: The app starts PocketBase automatically
+### Method 1: Web server with macOS LaunchAgents
 
-Just run `python main.py` — it checks if PocketBase is running, downloads it
-if missing, and starts it as a background process. No configuration needed.
-
-### Method 2: macOS LaunchAgents (persistent background services)
-
-Install services that start on login and stay running even without the desktop app:
+Install the web preview server to start on login:
 
 ```bash
-# Install auto-start for both PocketBase and web server
 bash scripts/setup_autostart.sh
+```
 
-# Or install individually:
-# 1. Copy and load the plist files
-cp scripts/com.nubri.pocketbase.plist ~/Library/LaunchAgents/
-cp scripts/com.nubri.biobank-web.plist ~/Library/LaunchAgents/
-launchctl load -w ~/Library/LaunchAgents/com.nubri.pocketbase.plist
-launchctl load -w ~/Library/LaunchAgents/com.nubri.biobank-web.plist
+This installs `com.nubri.biobank-web.plist` in `~/Library/LaunchAgents/`,
+which keeps the Flask web server running in the background.
 
+```bash
 # Check status
 launchctl list | grep nubri
 
 # Remove auto-start
 bash scripts/setup_autostart.sh --uninstall
-```
-
-### Method 3: Start PocketBase manually as a background service
-
-```bash
-bash scripts/start_pocketbase.sh
 ```
 
 ---
@@ -382,43 +392,40 @@ bash scripts/start_pocketbase.sh
 
 ```
 NUBRI-Biobank-system/
-├── main.py                     # Entry point — auto-starts PocketBase + desktop app
+├── main.py                     # Entry point — starts desktop app
 ├── installer.py                # PyQt5 GUI setup wizard
 ├── build_app.py                # PyInstaller .app bundle builder
+├── build_installer.py          # PyInstaller standalone installer builder
 ├── requirements.txt            # Python dependencies
 │
 ├── app/
-│   ├── auth/
-│   │   └── pocketbase_client.py   # PocketBase REST API client (login, signup, verify)
-│   │
 │   ├── database/
-│   │   ├── connection.py          # SQLite connection manager (WAL mode, auto-migrate)
-│   │   ├── models.py              # Specimen CRUD, dynamic columns, settings
-│   │   └── backup.py              # Google Drive backup/restore
+│   │   ├── connection.py       # SQLite connection manager (WAL mode, auto-migrate)
+│   │   ├── models.py           # Specimen CRUD, dynamic columns, settings
+│   │   ├── auth.py             # User auth (signup/login/sessions) with hashed passwords
+│   │   └── backup.py           # Google Drive backup/restore
 │   │
 │   ├── gui/
-│   │   ├── main_window.py         # Tabbed main window + menu + sign out
-│   │   ├── login_dialog.py        # PocketBase login dialog
-│   │   ├── label_form.py          # Dynamic specimen entry form
-│   │   ├── search_dialog.py       # Search + camera QR scanning
-│   │   ├── schema_manager.py      # Add/edit/delete/reorder columns
-│   │   └── settings_widget.py     # Printer, web, PocketBase, backup config
+│   │   ├── main_window.py      # Tabbed main window + menu + sign out
+│   │   ├── login_dialog.py     # Sign in / Sign up dialog (SQLite auth)
+│   │   ├── label_form.py       # Dynamic specimen entry form
+│   │   ├── search_dialog.py    # Search + camera QR scanning
+│   │   ├── schema_manager.py   # Add/edit/delete/reorder columns
+│   │   └── settings_widget.py  # Printer, web, backup config
 │   │
 │   ├── printer/
-│   │   └── label_printer.py       # Xprinter ESC/POS thermal printing
+│   │   └── label_printer.py    # Xprinter ESC/POS thermal printing
 │   │
 │   ├── qr_code/
-│   │   └── qr_handler.py          # QR generation + camera decode
+│   │   └── qr_handler.py       # QR generation + camera decode
 │   │
 │   └── web/
-│       ├── server.py              # Flask web server with auth + QR lookup
-│       └── server_headless.py     # Standalone web server runner (for launchd)
+│       ├── server.py           # Flask web server with auth + QR lookup
+│       └── server_headless.py  # Standalone web server runner (for launchd)
 │
 └── scripts/
-    ├── com.nubri.pocketbase.plist     # macOS launchd plist for PocketBase
     ├── com.nubri.biobank-web.plist    # macOS launchd plist for web server
-    ├── setup_autostart.sh             # Install/remove launchd services
-    └── start_pocketbase.sh            # Download & start PocketBase manually
+    └── setup_autostart.sh             # Install/remove launchd services
 ```
 
 ---
@@ -428,8 +435,9 @@ NUBRI-Biobank-system/
 ### GUI & Desktop
 - **[PyQt5](https://riverbankcomputing.com/software/pyqt/)** — Cross-platform desktop GUI framework. Provides windows, dialogs, tabs, tables, and all UI components. Chosen over tkinter for its professional look, advanced widgets, and styling capabilities.
 
-### Database
+### Database & Auth
 - **SQLite3** (built-in) — Embedded relational database. Zero configuration, no server process needed. WAL mode enables concurrent reads during writes for fast performance. JSON1 extension allows querying dynamic custom fields.
+- **hashlib** (built-in) — SHA-256 password hashing with random salt. No external auth server required — user accounts are stored securely in the local database.
 
 ### QR Codes
 - **[qrcode](https://github.com/lincolnloop/python-qrcode)** — QR code generation. Creates high-quality QR codes with configurable error correction and box size.
@@ -443,28 +451,16 @@ NUBRI-Biobank-system/
 ### Web Server
 - **[Flask](https://flask.palletsprojects.com/)** — Lightweight Python web framework for the mobile preview server. Serves the responsive HTML interface and REST API for specimen lookup.
 
-### Authentication
-- **PocketBase** — Open-source backend with built-in authentication. Manages user accounts, tokens, and session verification. The desktop app and web server both authenticate against the same PocketBase instance using its REST API.
-
 ### Cloud Backup
 - **[google-api-python-client](https://github.com/googleapis/google-api-python-client)** — Google Drive API client for uploading database backups.
 - **[google-auth-oauthlib](https://github.com/GoogleCloudPlatform/google-auth-library-python-oauthlib)** — OAuth 2.0 authentication flow for Google services.
 
 ### Network & HTTP
-- **[requests](https://requests.readthedocs.io/)** — HTTP client for PocketBase API calls and web server operations.
+- **[requests](https://requests.readthedocs.io/)** — HTTP client for web server operations.
 
 ---
 
 ## Troubleshooting
-
-### PocketBase won't start
-```bash
-# Check if something is already on port 8090
-lsof -i :8090
-
-# Start PocketBase manually with verbose logging
-~/Biobank/pocketbase/pocketbase serve --http 127.0.0.1:8090 --dir ~/Biobank/pb_data
-```
 
 ### Camera not working for QR scanning
 ```bash
@@ -484,5 +480,11 @@ sudo usermod -a -G video $USER
 - Ensure both devices are on the same network
 - Check firewall: `sudo firewall-cmd --add-port=5000/tcp` (Linux)
 - Verify the IP address — use the local network IP, not 127.0.0.1
+
+### Can't sign in
+- First time? Click **Create an account** to register
+- Passwords are case-sensitive and require at least 4 characters
+- If you forget your password, delete the `users` table from the database
+  (or ask an admin to recreate the account)
 
 ---

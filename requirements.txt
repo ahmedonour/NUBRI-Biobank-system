@@ -13,10 +13,8 @@ pyzbar>=0.1.9
 
 # Xprinter Thermal Printer (ESC/POS)
 python-escpos>=3.0
+pyserial>=3.5
 Pillow>=9.0.0
-
-# PocketBase authentication (REST API via requests)
-# Download & run PocketBase from https://pocketbase.io
 
 # Web preview server
 Flask>=2.0.0

@@ -1,27 +1,21 @@
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QFormLayout,
     QPushButton, QLabel, QLineEdit, QMessageBox,
-    QDialogButtonBox, QSpacerItem, QSizePolicy, QCheckBox
+    QStackedWidget, QWidget
 )
-from PyQt5.QtCore import Qt, QSettings
+from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QFont
 
 
 class LoginDialog(QDialog):
-    def __init__(self, parent=None):
+    def __init__(self, db=None, parent=None):
         super().__init__(parent)
+        self.db = db
         self.auth = None
-        self.settings = QSettings("NUBRI", "Biobank")
-        self.setWindowTitle("Sign In — NUBRI Biobank")
-        self.setFixedSize(420, 340)
+        self.setWindowTitle("NUBRI Biobank — Sign In")
+        self.setFixedSize(420, 520)
         self.setModal(True)
-        self.setStyleSheet("""
-            QDialog {
-                background-color: #fafafa;
-            }
-        """)
         self._setup_ui()
-        self._load_saved()
 
     def _setup_ui(self):
         layout = QVBoxLayout(self)
@@ -30,106 +24,186 @@ class LoginDialog(QDialog):
 
         title = QLabel("NUBRI Biobank System")
         title.setFont(QFont("", 18, QFont.Bold))
-        title.setStyleSheet("color: #1a73e8;")
+        title.setStyleSheet("color: #4da6ff;")
         title.setAlignment(Qt.AlignCenter)
         layout.addWidget(title)
 
-        subtitle = QLabel("Sign in with your PocketBase account")
-        subtitle.setStyleSheet("color: #666; font-size: 12px;")
+        self.stack = QStackedWidget()
+        layout.addWidget(self.stack)
+
+        self.stack.addWidget(self._login_page())
+        self.stack.addWidget(self._signup_page())
+
+        layout.addSpacing(5)
+        self.status_label = QLabel("")
+        self.status_label.setAlignment(Qt.AlignCenter)
+        self.status_label.setStyleSheet("color: #ef5350; font-size: 12px;")
+        layout.addWidget(self.status_label)
+
+    def _style_input(self):
+        return ""
+
+    def _style_btn(self, color="#4da6ff"):
+        return f"""
+            QPushButton {{
+                background-color: {color}; color: white; padding: 14px;
+                border: none; border-radius: 6px; font-size: 14px; font-weight: bold;
+            }}
+            QPushButton:hover {{ background-color: {self._darken(color)}; }}
+            QPushButton:disabled {{ background-color: #555; }}
+        """
+
+    @staticmethod
+    def _darken(hex_color):
+        c = hex_color.lstrip("#")
+        r = max(int(c[0:2], 16) - 30, 0)
+        g = max(int(c[2:4], 16) - 30, 0)
+        b = max(int(c[4:6], 16) - 30, 0)
+        return f"#{r:02x}{g:02x}{b:02x}"
+
+    # ── Login page ────────────────────────────────────────────────────
+
+    def _login_page(self):
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(0, 10, 0, 0)
+
+        subtitle = QLabel("Sign in to continue")
+        subtitle.setStyleSheet("color: #9e9e9e; font-size: 12px;")
         subtitle.setAlignment(Qt.AlignCenter)
         layout.addWidget(subtitle)
+        layout.addSpacing(12)
 
-        layout.addSpacing(15)
+        self.login_email = QLineEdit()
+        self.login_email.setPlaceholderText("Email")
+        layout.addWidget(self.login_email)
 
-        form = QFormLayout()
-        form.setSpacing(8)
-
-        self.server_url = QLineEdit()
-        self.server_url.setPlaceholderText("http://127.0.0.1:8090")
-        self.server_url.setStyleSheet(self._input_style())
-        form.addRow("Server URL:", self.server_url)
-
-        self.email_input = QLineEdit()
-        self.email_input.setPlaceholderText("your@email.com")
-        self.email_input.setStyleSheet(self._input_style())
-        form.addRow("Email:", self.email_input)
-
-        self.password_input = QLineEdit()
-        self.password_input.setPlaceholderText("••••••••")
-        self.password_input.setEchoMode(QLineEdit.Password)
-        self.password_input.setStyleSheet(self._input_style())
-        self.password_input.returnPressed.connect(self._login)
-        form.addRow("Password:", self.password_input)
-
-        self.remember_check = QCheckBox("Remember server URL")
-        self.remember_check.setStyleSheet("color: #555;")
-        form.addRow("", self.remember_check)
-
-        layout.addLayout(form)
-        layout.addSpacing(10)
+        self.login_password = QLineEdit()
+        self.login_password.setPlaceholderText("Password")
+        self.login_password.setEchoMode(QLineEdit.Password)
+        self.login_password.returnPressed.connect(self._login)
+        layout.addWidget(self.login_password)
 
         self.login_btn = QPushButton("Sign In")
-        self.login_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #1a73e8; color: white; padding: 12px;
-                border: none; border-radius: 6px; font-size: 14px; font-weight: bold;
-            }
-            QPushButton:hover { background-color: #1557b0; }
-            QPushButton:disabled { background-color: #ccc; }
-        """)
+        self.login_btn.setStyleSheet(self._style_btn())
         self.login_btn.clicked.connect(self._login)
         layout.addWidget(self.login_btn)
 
-        self.status_label = QLabel("")
-        self.status_label.setAlignment(Qt.AlignCenter)
-        self.status_label.setStyleSheet("color: #e74c3c; font-size: 12px;")
-        layout.addWidget(self.status_label)
+        self.switch_to_signup_btn = QPushButton("Create an account")
+        self.switch_to_signup_btn.setStyleSheet(
+            "QPushButton { background: none; border: none; color: #4da6ff; "
+            "font-size: 12px; text-decoration: underline; padding: 5px; }"
+        )
+        self.switch_to_signup_btn.clicked.connect(lambda: self.stack.setCurrentIndex(1))
+        layout.addWidget(self.switch_to_signup_btn, alignment=Qt.AlignCenter)
 
-    def _input_style(self):
-        return """
-            QLineEdit {
-                padding: 8px 12px; border: 2px solid #ddd;
-                border-radius: 6px; font-size: 13px;
-            }
-            QLineEdit:focus { border-color: #1a73e8; }
-        """
+        return page
 
-    def _load_saved(self):
-        saved_url = self.settings.value("pocketbase_url", "")
-        if saved_url:
-            self.server_url.setText(saved_url)
-            self.remember_check.setChecked(True)
+    # ── Sign up page ──────────────────────────────────────────────────
+
+    def _signup_page(self):
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(0, 10, 0, 0)
+
+        subtitle = QLabel("Create a new account")
+        subtitle.setStyleSheet("color: #9e9e9e; font-size: 12px;")
+        subtitle.setAlignment(Qt.AlignCenter)
+        layout.addWidget(subtitle)
+        layout.addSpacing(12)
+
+        self.signup_name = QLineEdit()
+        self.signup_name.setPlaceholderText("Full name (optional)")
+        layout.addWidget(self.signup_name)
+
+        self.signup_email = QLineEdit()
+        self.signup_email.setPlaceholderText("Email")
+        layout.addWidget(self.signup_email)
+
+        self.signup_password = QLineEdit()
+        self.signup_password.setPlaceholderText("Password (min 4 characters)")
+        self.signup_password.setEchoMode(QLineEdit.Password)
+        layout.addWidget(self.signup_password)
+
+        self.signup_confirm = QLineEdit()
+        self.signup_confirm.setPlaceholderText("Confirm password")
+        self.signup_confirm.setEchoMode(QLineEdit.Password)
+        self.signup_confirm.returnPressed.connect(self._signup)
+        layout.addWidget(self.signup_confirm)
+
+        self.signup_btn = QPushButton("Create Account")
+        self.signup_btn.setStyleSheet(self._style_btn("#4caf50"))
+        self.signup_btn.clicked.connect(self._signup)
+        layout.addWidget(self.signup_btn)
+
+        self.back_to_login_btn = QPushButton("Already have an account? Sign in")
+        self.back_to_login_btn.setStyleSheet(
+            "QPushButton { background: none; border: none; color: #4da6ff; "
+            "font-size: 12px; text-decoration: underline; padding: 5px; }"
+        )
+        self.back_to_login_btn.clicked.connect(lambda: self.stack.setCurrentIndex(0))
+        layout.addWidget(self.back_to_login_btn, alignment=Qt.AlignCenter)
+
+        return page
+
+    # ── Actions ───────────────────────────────────────────────────────
 
     def _login(self):
-        server_url = self.server_url.text().strip()
-        email = self.email_input.text().strip()
-        password = self.password_input.text()
+        email = self.login_email.text().strip()
+        password = self.login_password.text()
 
-        if not server_url or not email or not password:
+        if not email or not password:
             self.status_label.setText("Please fill in all fields.")
             return
 
-        self.login_btn.setEnabled(False)
-        self.login_btn.setText("Signing in...")
-        self.status_label.setText("")
-
-        from ..auth.pocketbase_client import PocketBaseAuth
+        self._set_loading(True, "Signing in...")
+        from ..database.auth import AuthManager
 
         try:
-            self.auth = PocketBaseAuth(base_url=server_url)
+            self.auth = AuthManager(self.db)
             self.auth.login(email, password)
-
-            if self.remember_check.isChecked():
-                self.settings.setValue("pocketbase_url", server_url)
-            else:
-                self.settings.remove("pocketbase_url")
-
             self.accept()
         except PermissionError as e:
             self.status_label.setText(str(e))
-            self.login_btn.setEnabled(True)
-            self.login_btn.setText("Sign In")
+            self._set_loading(False, "Sign In")
         except Exception as e:
-            self.status_label.setText(f"Connection error: {str(e)}")
-            self.login_btn.setEnabled(True)
-            self.login_btn.setText("Sign In")
+            self.status_label.setText(f"Error: {str(e)}")
+            self._set_loading(False, "Sign In")
+
+    def _signup(self):
+        name = self.signup_name.text().strip()
+        email = self.signup_email.text().strip()
+        password = self.signup_password.text()
+        confirm = self.signup_confirm.text()
+
+        if not email or not password:
+            self.status_label.setText("Email and password are required.")
+            return
+        if password != confirm:
+            self.status_label.setText("Passwords do not match.")
+            return
+        if len(password) < 4:
+            self.status_label.setText("Password must be at least 4 characters.")
+            return
+
+        self._set_loading(True, "Creating account...")
+        from ..database.auth import AuthManager
+
+        try:
+            self.auth = AuthManager(self.db)
+            self.auth.signup(email, password, name)
+            self.accept()
+        except ValueError as e:
+            self.status_label.setText(str(e))
+            self._set_loading(False, "Create Account")
+        except Exception as e:
+            self.status_label.setText(f"Error: {str(e)}")
+            self._set_loading(False, "Create Account")
+
+    def _set_loading(self, loading, text):
+        if self.stack.currentIndex() == 0:
+            self.login_btn.setEnabled(not loading)
+            self.login_btn.setText(text)
+        else:
+            self.signup_btn.setEnabled(not loading)
+            self.signup_btn.setText(text)

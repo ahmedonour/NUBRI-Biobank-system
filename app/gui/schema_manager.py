@@ -57,11 +57,11 @@ class SchemaManagerWidget(QWidget):
         layout = QVBoxLayout(self)
 
         title = QLabel("Manage Custom Columns")
-        title.setStyleSheet("font-size: 18px; font-weight: bold; color: #1a73e8; margin-bottom: 10px;")
+        title.setStyleSheet("font-size: 18px; font-weight: bold; color: #4da6ff; margin-bottom: 10px;")
         layout.addWidget(title)
 
         info = QLabel("Add, edit, or remove columns. Changes apply to all new labels.")
-        info.setStyleSheet("color: #666; margin-bottom: 10px;")
+        info.setStyleSheet("color: #9e9e9e; margin-bottom: 10px;")
         layout.addWidget(info)
 
         self.table = QTableWidget()
@@ -73,17 +73,6 @@ class SchemaManagerWidget(QWidget):
         self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeToContents)
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
         self.table.setSelectionMode(QTableWidget.SingleSelection)
-        self.table.setStyleSheet("""
-            QTableWidget {
-                border: 1px solid #ddd; border-radius: 6px;
-                gridline-color: #f0f0f0;
-            }
-            QHeaderView::section {
-                background-color: #f8f9fa; padding: 8px;
-                border: none; border-bottom: 2px solid #ddd;
-                font-weight: bold;
-            }
-        """)
         layout.addWidget(self.table)
 
         btn_layout = QHBoxLayout()
@@ -91,10 +80,10 @@ class SchemaManagerWidget(QWidget):
         self.add_btn = QPushButton("+ Add Column")
         self.add_btn.setStyleSheet("""
             QPushButton {
-                background-color: #1a73e8; color: white; padding: 10px 20px;
+                background-color: #4da6ff; color: white; padding: 10px 20px;
                 border: none; border-radius: 6px; font-weight: bold;
             }
-            QPushButton:hover { background-color: #1557b0; }
+            QPushButton:hover { background-color: #3d8bd4; }
         """)
         self.add_btn.clicked.connect(self._add_column)
         btn_layout.addWidget(self.add_btn)
@@ -102,10 +91,10 @@ class SchemaManagerWidget(QWidget):
         self.edit_btn = QPushButton("Edit")
         self.edit_btn.setStyleSheet("""
             QPushButton {
-                background-color: #f0f0f0; color: #333; padding: 10px 20px;
+                background-color: #555; color: #e0e0e0; padding: 10px 20px;
                 border: none; border-radius: 6px;
             }
-            QPushButton:hover { background-color: #e0e0e0; }
+            QPushButton:hover { background-color: #666; }
         """)
         self.edit_btn.clicked.connect(self._edit_column)
         btn_layout.addWidget(self.edit_btn)
@@ -113,10 +102,10 @@ class SchemaManagerWidget(QWidget):
         self.delete_btn = QPushButton("Delete")
         self.delete_btn.setStyleSheet("""
             QPushButton {
-                background-color: #e74c3c; color: white; padding: 10px 20px;
+                background-color: #ef5350; color: white; padding: 10px 20px;
                 border: none; border-radius: 6px;
             }
-            QPushButton:hover { background-color: #c0392b; }
+            QPushButton:hover { background-color: #e53935; }
         """)
         self.delete_btn.clicked.connect(self._delete_column)
         btn_layout.addWidget(self.delete_btn)
@@ -124,10 +113,10 @@ class SchemaManagerWidget(QWidget):
         self.move_up_btn = QPushButton("Move Up")
         self.move_up_btn.setStyleSheet("""
             QPushButton {
-                background-color: #f0f0f0; color: #333; padding: 10px 20px;
+                background-color: #555; color: #e0e0e0; padding: 10px 20px;
                 border: none; border-radius: 6px;
             }
-            QPushButton:hover { background-color: #e0e0e0; }
+            QPushButton:hover { background-color: #666; }
         """)
         self.move_up_btn.clicked.connect(self._move_up)
         btn_layout.addWidget(self.move_up_btn)
@@ -135,10 +124,10 @@ class SchemaManagerWidget(QWidget):
         self.move_down_btn = QPushButton("Move Down")
         self.move_down_btn.setStyleSheet("""
             QPushButton {
-                background-color: #f0f0f0; color: #333; padding: 10px 20px;
+                background-color: #555; color: #e0e0e0; padding: 10px 20px;
                 border: none; border-radius: 6px;
             }
-            QPushButton:hover { background-color: #e0e0e0; }
+            QPushButton:hover { background-color: #666; }
         """)
         self.move_down_btn.clicked.connect(self._move_down)
         btn_layout.addWidget(self.move_down_btn)

@@ -1,10 +1,10 @@
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QFormLayout,
     QPushButton, QLabel, QLineEdit, QScrollArea,
-    QMessageBox, QGroupBox
+    QMessageBox, QGroupBox, QDateEdit
 )
-from PyQt5.QtCore import pyqtSignal
-from ..database.models import SpecimenModel, ColumnDefinition
+from PyQt5.QtCore import pyqtSignal, QDate
+from ..database.models import SpecimenModel, ColumnDefinition, SettingsModel
 from .print_dialog import PrintDialog
 
 
@@ -16,6 +16,7 @@ class LabelFormWidget(QWidget):
         self.db = db
         self.specimen_model = SpecimenModel(self.db)
         self.column_def = ColumnDefinition(self.db)
+        self.settings_model = SettingsModel(self.db)
         self.field_widgets = {}
         self._setup_ui()
 
@@ -91,9 +92,23 @@ class LabelFormWidget(QWidget):
         for col in columns:
             name = col["column_name"]
             is_required = col["is_required"]
+            col_type = col.get("column_type", "TEXT")
             label_text = f"{name} {'*' if is_required else ''}"
-            edit = QLineEdit()
-            edit.setPlaceholderText(f"Enter {name}")
+
+            if name == "Sample ID":
+                edit = QLineEdit()
+                edit.setText(self.settings_model.get_next_sample_id())
+                edit.setReadOnly(True)
+                edit.setStyleSheet("background-color: #2a2a2a; color: #4da6ff; font-weight: bold;")
+            elif col_type == "DATE":
+                edit = QDateEdit()
+                edit.setDate(QDate.currentDate())
+                edit.setCalendarPopup(True)
+                edit.setDisplayFormat("yyyy-MM-dd")
+            else:
+                edit = QLineEdit()
+                edit.setPlaceholderText(f"Enter {name}")
+
             self.field_widgets[name] = edit
             self.form_layout.addRow(QLabel(label_text), edit)
 
@@ -106,7 +121,10 @@ class LabelFormWidget(QWidget):
             name = col["column_name"]
             widget = self.field_widgets.get(name)
             if widget:
-                value = widget.text().strip()
+                if isinstance(widget, QDateEdit):
+                    value = widget.date().toString("yyyy-MM-dd")
+                else:
+                    value = widget.text().strip()
                 if col["is_required"] and not value:
                     missing.append(name)
                 data[name] = value
@@ -120,6 +138,7 @@ class LabelFormWidget(QWidget):
 
         try:
             qr_code = self.specimen_model.create(data)
+            self.settings_model.increment_next_sample_id()
             self._last_qr = qr_code
             self._last_fields = dict(data)
             self.label_created.emit(qr_code)
@@ -138,8 +157,13 @@ class LabelFormWidget(QWidget):
             dlg.exec_()
 
     def _clear(self):
-        for widget in self.field_widgets.values():
-            widget.clear()
+        for name, widget in self.field_widgets.items():
+            if name == "Sample ID":
+                widget.setText(self.settings_model.get_next_sample_id())
+            elif isinstance(widget, QDateEdit):
+                widget.setDate(QDate.currentDate())
+            else:
+                widget.clear()
 
     def refresh(self):
         self._rebuild_fields()

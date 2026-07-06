@@ -2,9 +2,9 @@ from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QFormLayout,
     QPushButton, QLabel, QLineEdit, QComboBox,
     QCheckBox, QMessageBox, QGroupBox, QSpinBox,
-    QFileDialog
+    QFileDialog, QScrollArea
 )
-from ..database.models import SettingsModel
+from ..database.models import SettingsModel, SpecimenModel
 
 
 class SettingsWidget(QWidget):
@@ -20,10 +20,18 @@ class SettingsWidget(QWidget):
         layout = QVBoxLayout(self)
 
         title = QLabel("Settings")
-        title.setStyleSheet("font-size: 18px; font-weight: bold; color: #4da6ff; margin-bottom: 10px;")
+        title.setStyleSheet("font-size: 18px; font-weight: bold; color: #4da6ff; margin-bottom: 10px; overflow:scroll;")
         layout.addWidget(title)
 
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setStyleSheet("QScrollArea { border: none; }")
+
+        content = QWidget()
+        content_layout = QVBoxLayout(content)
+
         printer_group = QGroupBox("Printer Settings")
+        printer_group.setMinimumHeight(200)
         printer_layout = QFormLayout(printer_group)
 
         self.printer_mode = QComboBox()
@@ -51,13 +59,13 @@ class SettingsWidget(QWidget):
 
         size_row = QHBoxLayout()
         self.label_width = QSpinBox()
-        self.label_width.setRange(20, 200)
+        self.label_width.setRange(10, 200)
         self.label_width.setSuffix(" mm")
-        self.label_width.setValue(50)
+        self.label_width.setValue(40)
         self.label_height = QSpinBox()
-        self.label_height.setRange(10, 150)
+        self.label_height.setRange(5, 150)
         self.label_height.setSuffix(" mm")
-        self.label_height.setValue(30)
+        self.label_height.setValue(13)
         size_row.addWidget(QLabel("W:"))
         size_row.addWidget(self.label_width)
         size_row.addWidget(QLabel("H:"))
@@ -65,11 +73,20 @@ class SettingsWidget(QWidget):
         size_row.addStretch()
         printer_layout.addRow("Label Size:", size_row)
 
+        gap_row = QHBoxLayout()
+        self.label_gap = QSpinBox()
+        self.label_gap.setRange(0, 20)
+        self.label_gap.setSuffix(" mm")
+        self.label_gap.setValue(3)
+        gap_row.addWidget(self.label_gap)
+        gap_row.addStretch()
+        printer_layout.addRow("Gap between:", gap_row)
+
         self.design_btn = QPushButton("Design Label Layout")
         self.design_btn.setStyleSheet("""
             QPushButton {
-                background-color: #ff9800; color: white; padding: 10px 20px;
-                border: none; border-radius: 6px; font-weight: bold;
+                background-color: #ff9800; color: white; padding: 0px 0px;
+                border: none; border-radius: 6px; font-weight: bold; height: 40px; width: 150px;
             }
             QPushButton:hover { background-color: #f57c00; }
         """)
@@ -84,9 +101,11 @@ class SettingsWidget(QWidget):
         printer_note.setWordWrap(True)
         printer_layout.addRow(printer_note)
 
-        layout.addWidget(printer_group)
+        content_layout.addWidget(printer_group)
 
         web_group = QGroupBox("Web Preview Server")
+        # web_group.setMinimumHeight(300)
+        # web_group.setStyleSheet("height: 150px;")
         web_layout = QFormLayout(web_group)
 
         self.web_port = QLineEdit()
@@ -99,7 +118,7 @@ class SettingsWidget(QWidget):
         web_note.setWordWrap(True)
         web_layout.addRow(web_note)
 
-        layout.addWidget(web_group)
+        content_layout.addWidget(web_group)
 
         backup_group = QGroupBox("Google Drive Backup")
         backup_layout = QFormLayout(backup_group)
@@ -114,6 +133,7 @@ class SettingsWidget(QWidget):
 
         self.credentials_path = QLineEdit()
         self.credentials_path.setPlaceholderText("Path to client_secret.json")
+        self.credentials_path.setStyleSheet("width: 300px;")
         backup_layout.addRow("Credentials:", self.credentials_path)
 
         self.browse_creds_btn = QPushButton("Browse")
@@ -124,7 +144,22 @@ class SettingsWidget(QWidget):
         self.backup_now_btn.clicked.connect(self._backup_now)
         backup_layout.addRow("", self.backup_now_btn)
 
-        layout.addWidget(backup_group)
+        content_layout.addWidget(backup_group)
+
+        db_group = QGroupBox("Database")
+        db_layout = QVBoxLayout(db_group)
+        self.delete_all_btn = QPushButton("Delete All Data")
+        self.delete_all_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #d32f2f; color: white; padding: 12px 24px;
+                border: none; border-radius: 6px; font-size: 14px; font-weight: bold;
+            }
+            QPushButton:hover { background-color: #b71c1c; }
+        """)
+        self.delete_all_btn.clicked.connect(self._delete_all_data)
+        db_layout.addWidget(self.delete_all_btn)
+        db_layout.addWidget(QLabel("Permanently deletes all specimen records. This cannot be undone."))
+        content_layout.addWidget(db_group)
 
         btn_layout = QHBoxLayout()
         self.save_btn = QPushButton("Save Settings")
@@ -138,8 +173,11 @@ class SettingsWidget(QWidget):
         self.save_btn.clicked.connect(self._save_settings)
         btn_layout.addWidget(self.save_btn)
 
-        layout.addLayout(btn_layout)
-        layout.addStretch()
+        content_layout.addLayout(btn_layout)
+        content_layout.addStretch()
+
+        scroll.setWidget(content)
+        layout.addWidget(scroll)
 
     def _load_settings(self):
         all_settings = self.settings.get_all()
@@ -149,8 +187,9 @@ class SettingsWidget(QWidget):
         self.printer_host.setText(all_settings.get("printer_host", ""))
         self.printer_port.setText(all_settings.get("printer_port", "9100"))
 
-        self.label_width.setValue(int(all_settings.get("label_width_mm", "50")))
-        self.label_height.setValue(int(all_settings.get("label_height_mm", "30")))
+        self.label_width.setValue(int(all_settings.get("label_width_mm", "40")))
+        self.label_height.setValue(int(all_settings.get("label_height_mm", "13")))
+        self.label_gap.setValue(int(all_settings.get("label_gap_mm", "3")))
 
         self.web_port.setText(all_settings.get("web_port", "5000"))
         self.backup_enabled.setChecked(all_settings.get("backup_enabled", "false") == "true")
@@ -175,6 +214,7 @@ class SettingsWidget(QWidget):
 
         self.settings.set("label_width_mm", str(self.label_width.value()))
         self.settings.set("label_height_mm", str(self.label_height.value()))
+        self.settings.set("label_gap_mm", str(self.label_gap.value()))
 
         self.settings.set("web_port", self.web_port.text())
         self.settings.set("backup_enabled", "true" if self.backup_enabled.isChecked() else "false")
@@ -188,6 +228,27 @@ class SettingsWidget(QWidget):
         )
         if path:
             self.credentials_path.setText(path)
+
+    def _delete_all_data(self):
+        reply = QMessageBox.warning(
+            self, "Delete All Data",
+            "Are you sure you want to delete ALL specimen data?\n\n"
+            "This action cannot be undone!",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No
+        )
+        if reply == QMessageBox.Yes:
+            confirm = QMessageBox.question(
+                self, "Confirm",
+                "Type YES to confirm permanent deletion of all records.",
+                QMessageBox.Yes | QMessageBox.No, QMessageBox.No
+            )
+            if confirm == QMessageBox.Yes:
+                try:
+                    model = SpecimenModel(self.db)
+                    model.delete_all()
+                    QMessageBox.information(self, "Deleted", "All specimen data has been deleted.")
+                except Exception as e:
+                    QMessageBox.critical(self, "Error", f"Failed to delete: {str(e)}")
 
     def _backup_now(self):
         try:

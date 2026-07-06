@@ -149,6 +149,11 @@ class SpecimenModel:
         cursor = self.conn.execute("SELECT COUNT(*) FROM specimens")
         return cursor.fetchone()[0]
 
+    def delete_all(self):
+        self.conn.execute("DELETE FROM specimens")
+        self.conn.execute("DELETE FROM sqlite_sequence WHERE name='specimens'")
+        self.conn.commit()
+
 
 class SettingsModel:
     def __init__(self, db=None):
@@ -170,3 +175,19 @@ class SettingsModel:
     def get_all(self):
         cursor = self.conn.execute("SELECT * FROM settings")
         return {row["key"]: row["value"] for row in cursor.fetchall()}
+
+    def get_next_sample_id(self):
+        raw = self.get("next_sample_id", "1")
+        try:
+            num = int(raw)
+        except ValueError:
+            num = 1
+        return f"NU{num:010d}"
+
+    def increment_next_sample_id(self):
+        raw = self.get("next_sample_id", "1")
+        try:
+            num = int(raw)
+        except ValueError:
+            num = 1
+        self.set("next_sample_id", str(num + 1))

@@ -31,8 +31,8 @@ class PrintDialog(QDialog):
         title.setStyleSheet("font-size: 16px; font-weight: bold; color: #4da6ff;")
         layout.addWidget(title)
 
-        preview_group = QGroupBox("Preview (50×30mm)")
-        preview_layout = QVBoxLayout(preview_group)
+        self.preview_group = QGroupBox("Preview")
+        preview_layout = QVBoxLayout(self.preview_group)
         self.preview_label = QLabel()
         self.preview_label.setAlignment(Qt.AlignCenter)
         self.preview_label.setMinimumSize(300, 180)
@@ -41,7 +41,7 @@ class PrintDialog(QDialog):
         scroll.setWidgetResizable(True)
         scroll.setMaximumHeight(280)
         preview_layout.addWidget(scroll)
-        layout.addWidget(preview_group)
+        layout.addWidget(self.preview_group)
 
         printer_group = QGroupBox("Printer Options")
         form = QFormLayout(printer_group)
@@ -114,8 +114,9 @@ class PrintDialog(QDialog):
     def _update_preview(self):
         from .label_designer import load_template
         tpl = load_template(self.settings) if self.settings else None
-        w = tpl.get("width_mm", 50) if tpl else 50
-        h = tpl.get("height_mm", 30) if tpl else 30
+        w = tpl.get("width_mm", 40) if tpl else 40
+        h = tpl.get("height_mm", 13) if tpl else 13
+        self.preview_group.setTitle(f"Preview ({w}×{h}mm)")
         renderer = LabelRenderer(width_mm=w, height_mm=h)
         img = renderer.render(self.qr_code, self.fields_dict, template=tpl)
         img = img.convert("RGBA")
@@ -138,8 +139,8 @@ class PrintDialog(QDialog):
 
             from .label_designer import load_template
             tpl = load_template(self.settings) if self.settings else None
-            lw = tpl.get("width_mm", 50) if tpl else 50
-            lh = tpl.get("height_mm", 30) if tpl else 30
+            lw = tpl.get("width_mm", 40) if tpl else 40
+            lh = tpl.get("height_mm", 13) if tpl else 13
 
             print_label(
                 qr_code=self.qr_code,
@@ -151,6 +152,7 @@ class PrintDialog(QDialog):
                 thermal_copies=copies,
                 label_width_mm=lw,
                 label_height_mm=lh,
+                label_gap_mm=int(self.settings.get("label_gap_mm", "3")) if self.settings else 3,
                 template=tpl,
             )
             QMessageBox.information(self, "Printed", "Label sent to printer.")

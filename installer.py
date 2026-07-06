@@ -296,8 +296,8 @@ class InstallPage(QWizardPage):
                 "printer_backend": "network",
                 "printer_host": "192.168.1.100",
                 "printer_port": "9100",
-                "label_width_mm": "100",
-                "label_height_mm": "50",
+                "label_width_mm": "40",
+                "label_height_mm": "13",
                 "backup_enabled": "false",
                 "backup_interval_hours": "24",
             }

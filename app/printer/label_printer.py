@@ -22,13 +22,13 @@ def _load_font(size):
 
 
 DEFAULT_TEMPLATE = {
-    "width_mm": 50,
-    "height_mm": 30,
+    "width_mm": 40,
+    "height_mm": 13,
     "qr_position": "left",
     "qr_size_pct": 65,
     "qr_margin_pct": 3,
     "show_qr": True,
-    "show_border": True,
+    "show_border": False,
     "border_color": "#555555",
     "border_width": 1,
     "bg_color": "#ffffff",
@@ -185,14 +185,24 @@ class ThermalPrinter:
             self._printer.close()
             self._printer = None
 
-    def print_label(self, img):
+    def print_label(self, img, copies=1, gap_mm=0):
         if not self._printer:
             self.connect()
-        path = os.path.join(tempfile.gettempdir(), f"thermal_label_{id(img)}.png")
-        img.save(path)
+
+        gap_px = int(gap_mm / 25.4 * 203) if gap_mm > 0 else 0
+
+        # Combine all copies + gaps into a single image for reliability
+        total_h = img.height * copies + gap_px * (copies - 1)
+        combined = Image.new("RGB", (img.width, max(1, total_h)), "white")
+        for i in range(copies):
+            y = i * (img.height + gap_px)
+            combined.paste(img, (0, y))
+
+        path = os.path.join(tempfile.gettempdir(), f"thermal_label_{id(img)}_combined.png")
+        combined.save(path)
         self._printer.image(path)
-        self._printer.cut()
         os.unlink(path)
+        self._printer.cut()
 
 
 class SystemPrinter:
@@ -229,12 +239,10 @@ class SystemPrinter:
             page_rect = printer.pageRect(QPrinter.DevicePixel)
             scaled = pixmap.scaled(
                 page_rect.size().toSize(),
-                Qt.KeepAspectRatio,
+                Qt.IgnoreAspectRatio,
                 Qt.SmoothTransformation
             )
-            x = (page_rect.width() - scaled.width()) / 2
-            y = (page_rect.height() - scaled.height()) / 2
-            painter.drawPixmap(int(x), int(y), scaled)
+            painter.drawPixmap(0, 0, scaled)
         finally:
             painter.end()
 
@@ -247,15 +255,15 @@ class SystemPrinter:
 
 def print_label(qr_code, fields_dict, printer_mode="system", printer_name=None,
                 backend="network", host="192.168.1.100", port=9100,
-                thermal_copies=1, label_width_mm=50, label_height_mm=30,
-                template=None):
+                thermal_copies=1, label_width_mm=40, label_height_mm=13,
+                label_gap_mm=3, template=None):
     renderer = LabelRenderer(width_mm=label_width_mm, height_mm=label_height_mm)
     img = renderer.render(qr_code, fields_dict, template=template)
 
     if printer_mode == "thermal":
         tp = ThermalPrinter(backend, host, port)
         try:
-            tp.print_label(img)
+            tp.print_label(img, copies=thermal_copies, gap_mm=label_gap_mm)
         finally:
             tp.disconnect()
     else:

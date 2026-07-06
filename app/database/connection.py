@@ -71,7 +71,7 @@ class DatabaseConnection:
             VALUES ('Patient Name', 'TEXT', 2, 1);
 
             INSERT OR IGNORE INTO column_definitions (column_name, column_type, display_order, is_required)
-            VALUES ('Collection Date', 'TEXT', 3, 0);
+            VALUES ('Collection Date', 'DATE', 3, 0);
 
             INSERT OR IGNORE INTO column_definitions (column_name, column_type, display_order, is_required)
             VALUES ('Storage Location', 'TEXT', 4, 0);
@@ -82,11 +82,13 @@ class DatabaseConnection:
             INSERT OR IGNORE INTO settings (key, value) VALUES ('printer_backend', 'network');
             INSERT OR IGNORE INTO settings (key, value) VALUES ('printer_host', '192.168.1.100');
             INSERT OR IGNORE INTO settings (key, value) VALUES ('printer_port', '9100');
-            INSERT OR IGNORE INTO settings (key, value) VALUES ('label_width_mm', '100');
-            INSERT OR IGNORE INTO settings (key, value) VALUES ('label_height_mm', '50');
+            INSERT OR IGNORE INTO settings (key, value) VALUES ('label_width_mm', '40');
+            INSERT OR IGNORE INTO settings (key, value) VALUES ('label_height_mm', '13');
+            INSERT OR IGNORE INTO settings (key, value) VALUES ('label_gap_mm', '3');
             INSERT OR IGNORE INTO settings (key, value) VALUES ('web_port', '5000');
             INSERT OR IGNORE INTO settings (key, value) VALUES ('backup_enabled', 'false');
             INSERT OR IGNORE INTO settings (key, value) VALUES ('backup_interval_hours', '24');
+            INSERT OR IGNORE INTO settings (key, value) VALUES ('next_sample_id', '1');
 
             CREATE TABLE IF NOT EXISTS users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,

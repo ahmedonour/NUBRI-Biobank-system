@@ -254,8 +254,8 @@ class LabelDesignerDialog(QDialog):
         layout.addLayout(btn_layout)
 
     def _load_template(self):
-        self.width_spin.setValue(self.template.get("width_mm", 50))
-        self.height_spin.setValue(self.template.get("height_mm", 30))
+        self.width_spin.setValue(self.template.get("width_mm", 40))
+        self.height_spin.setValue(self.template.get("height_mm", 13))
         self.show_qr.setChecked(self.template.get("show_qr", True))
         self.qr_pos.setCurrentText(self.template.get("qr_position", "left"))
         self.qr_size.setValue(self.template.get("qr_size_pct", 65))

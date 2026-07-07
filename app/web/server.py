@@ -147,7 +147,7 @@ SPECIMEN_TEMPLATE = """
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Biobank Specimen Lookup</title>
+    <title>Biobank Barcode Lookup</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -184,13 +184,13 @@ SPECIMEN_TEMPLATE = """
 <body>
     <div class="container">
         <div class="header">
-            <h1>Biobank Specimen Lookup</h1>
+            <h1>Biobank Barcode Lookup</h1>
             <button class="signout-btn" onclick="signOut()">Sign Out</button>
         </div>
         <div class="scan-area">
             <video id="qr-video" autoplay muted playsinline></video>
             <button id="scan-btn" onclick="toggleScanner()">Open Camera Scanner</button>
-            <input type="text" id="qr-input" placeholder="Or enter QR code manually..." onkeydown="if(event.key==='Enter')lookup()">
+            <input type="text" id="qr-input" placeholder="Scan barcode or enter ID manually..." onkeydown="if(event.key==='Enter')lookup()">
         </div>
         <div class="loading" id="loading"><div class="spinner"></div>Looking up specimen...</div>
         <div class="not-found" id="not-found">Specimen not found.</div>
@@ -390,6 +390,9 @@ class WebServer:
                 return jsonify({"error": "No QR code provided"}), 400
 
             specimen = specimen_model.get_by_qr(qr_code)
+            if not specimen:
+                results = specimen_model.search(qr_code, column_name="Sample ID")
+                specimen = results[0] if results else None
             if not specimen:
                 return jsonify({"error": "Not found"}), 404
 

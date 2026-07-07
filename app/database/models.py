@@ -1,4 +1,4 @@
-import json
+import json, csv, io
 import uuid
 from datetime import datetime
 from .connection import DatabaseConnection
@@ -69,7 +69,7 @@ class SpecimenModel:
         return str(uuid.uuid4()).replace("-", "")[:16].upper()
 
     def create(self, custom_fields_dict):
-        qr_code = self.generate_qr_code()
+        qr_code = custom_fields_dict.get("Sample ID") or self.generate_qr_code()
         self.conn.execute(
             "INSERT INTO specimens (qr_code, custom_fields) VALUES (?, ?)",
             (qr_code, json.dumps(custom_fields_dict))
@@ -148,6 +148,69 @@ class SpecimenModel:
     def count(self):
         cursor = self.conn.execute("SELECT COUNT(*) FROM specimens")
         return cursor.fetchone()[0]
+
+    def get_all_unpaginated(self):
+        cursor = self.conn.execute("SELECT * FROM specimens ORDER BY created_at DESC")
+        results = []
+        for row in cursor.fetchall():
+            result = dict(row)
+            result["custom_fields"] = json.loads(result["custom_fields"])
+            results.append(result)
+        return results
+
+    def export_to_csv(self, filepath, columns):
+        specimens = self.get_all_unpaginated()
+        col_names = [c["column_name"] for c in columns]
+        with open(filepath, "w", newline="", encoding="utf-8-sig") as f:
+            writer = csv.writer(f)
+            writer.writerow(["QR Code"] + col_names + ["Created", "Updated"])
+            for spec in specimens:
+                fields = spec["custom_fields"]
+                row = [spec["qr_code"]]
+                row.extend(fields.get(n, "") for n in col_names)
+                row.append(spec.get("created_at", ""))
+                row.append(spec.get("updated_at", ""))
+                writer.writerow(row)
+
+    def import_from_csv(self, filepath, columns):
+        col_names = [c["column_name"] for c in columns]
+        imported = 0
+        errors = []
+        with open(filepath, "r", encoding="utf-8-sig") as f:
+            reader = csv.DictReader(f)
+            if not reader.fieldnames:
+                raise ValueError("Empty CSV file")
+            for row_num, row in enumerate(reader, start=2):
+                try:
+                    data = {}
+                    for n in col_names:
+                        data[n] = row.get(n, "").strip()
+                    qr_code = row.get("QR Code", "").strip()
+                    if qr_code:
+                        existing = self.get_by_qr(qr_code)
+                        if existing:
+                            self.update(existing["id"], data)
+                        else:
+                            self.conn.execute(
+                                "INSERT INTO specimens (qr_code, custom_fields) VALUES (?, ?)",
+                                (qr_code, json.dumps(data))
+                            )
+                    else:
+                        self.create(data)
+                    self.conn.commit()
+                    imported += 1
+                except Exception as e:
+                    errors.append(f"Row {row_num}: {e}")
+        return imported, errors
+
+    @staticmethod
+    def get_template_csv(columns):
+        col_names = [c["column_name"] for c in columns]
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(["QR Code"] + col_names + ["Created", "Updated"])
+        writer.writerow(["NU0000000001"] + [""] * (len(col_names) + 2))
+        return output.getvalue()
 
     def delete_all(self):
         self.conn.execute("DELETE FROM specimens")

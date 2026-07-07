@@ -80,30 +80,39 @@ class LabelDesignerDialog(QDialog):
         sf.addRow("Size:", sw)
         left.addWidget(size_group)
 
-        # ── QR code ──
-        qr_group = QGroupBox("QR Code")
+        # ── Barcode ──
+        qr_group = QGroupBox("Barcode")
         qf = QFormLayout(qr_group)
 
-        self.show_qr = QCheckBox("Show QR code")
+        self.show_qr = QCheckBox("Show barcode")
         self.show_qr.stateChanged.connect(lambda _: self._update_preview())
         qf.addRow("", self.show_qr)
 
-        self.qr_pos = QComboBox()
-        self.qr_pos.addItems(["left", "right"])
-        self.qr_pos.currentTextChanged.connect(lambda _: self._update_preview())
-        qf.addRow("Position:", self.qr_pos)
+        self.show_sample_id = QCheckBox("Show sample number")
+        self.show_sample_id.stateChanged.connect(lambda _: self._update_preview())
+        qf.addRow("", self.show_sample_id)
 
-        self.qr_size = QSlider(Qt.Horizontal)
-        self.qr_size.setRange(25, 95)
-        self.qr_size.setTickPosition(QSlider.TicksBelow)
-        self.qr_size.valueChanged.connect(lambda _: self._update_preview())
-        qf.addRow("Size %:", self.qr_size)
+        self.bc_height = QSlider(Qt.Horizontal)
+        self.bc_height.setRange(20, 90)
+        self.bc_height.setTickPosition(QSlider.TicksBelow)
+        self.bc_height.valueChanged.connect(lambda _: self._update_preview())
+        qf.addRow("Height %:", self.bc_height)
 
-        self.qr_margin = QSlider(Qt.Horizontal)
-        self.qr_margin.setRange(1, 10)
-        self.qr_margin.setTickPosition(QSlider.TicksBelow)
-        self.qr_margin.valueChanged.connect(lambda _: self._update_preview())
-        qf.addRow("Margin %:", self.qr_margin)
+        self.bc_width = QSlider(Qt.Horizontal)
+        self.bc_width.setRange(30, 100)
+        self.bc_width.setTickPosition(QSlider.TicksBelow)
+        self.bc_width.valueChanged.connect(lambda _: self._update_preview())
+        qf.addRow("Width %:", self.bc_width)
+
+        self.show_qr_code = QCheckBox("Show QR code")
+        self.show_qr_code.stateChanged.connect(lambda _: self._update_preview())
+        qf.addRow("", self.show_qr_code)
+
+        self.qr_code_size = QSlider(Qt.Horizontal)
+        self.qr_code_size.setRange(20, 80)
+        self.qr_code_size.setTickPosition(QSlider.TicksBelow)
+        self.qr_code_size.valueChanged.connect(lambda _: self._update_preview())
+        qf.addRow("QR size %:", self.qr_code_size)
 
         left.addWidget(qr_group)
 
@@ -199,7 +208,7 @@ class LabelDesignerDialog(QDialog):
         left.addWidget(color_group)
 
         # ── Fields ──
-        fields_group = QGroupBox("Fields to show (unchecked = all)")
+        fields_group = QGroupBox("Fields to show (unchecked = hidden)")
         ff = QVBoxLayout(fields_group)
         if self.column_def:
             for col in self.column_def.get_all():
@@ -257,9 +266,11 @@ class LabelDesignerDialog(QDialog):
         self.width_spin.setValue(self.template.get("width_mm", 40))
         self.height_spin.setValue(self.template.get("height_mm", 13))
         self.show_qr.setChecked(self.template.get("show_qr", True))
-        self.qr_pos.setCurrentText(self.template.get("qr_position", "left"))
-        self.qr_size.setValue(self.template.get("qr_size_pct", 65))
-        self.qr_margin.setValue(self.template.get("qr_margin_pct", 3))
+        self.show_sample_id.setChecked(self.template.get("show_sample_id", True))
+        self.bc_height.setValue(self.template.get("barcode_height_pct", 60))
+        self.bc_width.setValue(self.template.get("barcode_width_pct", 90))
+        self.show_qr_code.setChecked(self.template.get("show_qr_code", False))
+        self.qr_code_size.setValue(self.template.get("qr_code_size_pct", 40))
         self.show_border.setChecked(self.template.get("show_border", True))
         self.border_width_sb.setValue(self.template.get("border_width", 1))
         self.font_scale.setValue(self.template.get("font_scale", 100))
@@ -298,9 +309,11 @@ class LabelDesignerDialog(QDialog):
             "width_mm": self.width_spin.value(),
             "height_mm": self.height_spin.value(),
             "show_qr": self.show_qr.isChecked(),
-            "qr_position": self.qr_pos.currentText(),
-            "qr_size_pct": self.qr_size.value(),
-            "qr_margin_pct": self.qr_margin.value(),
+            "show_sample_id": self.show_sample_id.isChecked(),
+            "barcode_height_pct": self.bc_height.value(),
+            "barcode_width_pct": self.bc_width.value(),
+            "show_qr_code": self.show_qr_code.isChecked(),
+            "qr_code_size_pct": self.qr_code_size.value(),
             "show_border": self.show_border.isChecked(),
             "border_width": self.border_width_sb.value(),
             "border_color": self.border_color_btn.property("color_val") or "#555555",
@@ -324,9 +337,9 @@ class LabelDesignerDialog(QDialog):
         tpl = self._build_template()
         w = tpl["width_mm"]
         h = tpl["height_mm"]
-        dummy = {"Sample ID": "BIO-001", "Type": "Blood", "Patient": "J. Doe"}
+        dummy = {"Sample ID": "NU0000000001", "Type": "Blood", "Patient": "J. Doe"}
         renderer = LabelRenderer(width_mm=w, height_mm=h)
-        img = renderer.render("PREVIEW", dummy, template=tpl)
+        img = renderer.render("NU0000000001", dummy, template=tpl)
         img = img.convert("RGBA")
         data = img.tobytes("raw", "RGBA")
         qimage = QImage(data, img.width, img.height, QImage.Format_RGBA8888)

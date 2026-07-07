@@ -24,25 +24,14 @@ def _load_font(size):
 DEFAULT_TEMPLATE = {
     "width_mm": 40,
     "height_mm": 13,
-    "qr_position": "left",
-    "qr_size_pct": 65,
-    "qr_margin_pct": 3,
     "show_qr": True,
-    "show_border": False,
-    "border_color": "#555555",
-    "border_width": 1,
+    "show_qr_code": False,
+    "show_sample_id": True,
+    "barcode_height_pct": 60,
+    "barcode_width_pct": 90,
+    "qr_code_size_pct": 40,
     "bg_color": "#ffffff",
     "text_color": "#000000",
-    "label_color": "#666666",
-    "font_scale": 100,
-    "line_spacing_pct": 100,
-    "show_labels": True,
-    "text_align": "left",
-    "fields": [],
-    "max_fields": 4,
-    "title_text": "",
-    "title_color": "#000000",
-    "title_font_scale": 100,
 }
 
 
@@ -66,101 +55,99 @@ class LabelRenderer:
             tpl.update(template)
 
         w, h = self.width_px, self.height_px
-        bg = tpl["bg_color"]
-        img = Image.new("RGB", (w, h), bg)
+        img = Image.new("RGB", (w, h), tpl["bg_color"])
         draw = ImageDraw.Draw(img)
 
-        if tpl["show_border"]:
-            bw = tpl["border_width"]
-            draw.rectangle([0, 0, w - 1, h - 1], outline=tpl["border_color"], width=bw)
+        margin = max(1, int(h * 3 / 100))
+        gap = max(2, int(h * 2 / 100))
+        qr_gap = max(4, int(h * 4 / 100))
 
-        margin_pct = tpl.get("qr_margin_pct", 3)
-        margin = max(1, int(w * margin_pct / 100))
-        font_ratio = tpl["font_scale"] / 100
-        line_ratio = tpl.get("line_spacing_pct", 100) / 100
-        show_labels = tpl.get("show_labels", True)
-        text_align = tpl.get("text_align", "left")
-        show_qr = tpl.get("show_qr", True)
-        max_f = max_fields if max_fields is not None else tpl.get("max_fields", 4)
+        show_bc = tpl.get("show_qr", True)
+        show_qr = tpl.get("show_qr_code", False)
+        barcode_data = fields_dict.get("Sample ID", qr_code) or ""
 
-        gap = int(w * 0.05)
-        text_area_left = margin
-        text_area_width = w - 2 * margin
-
-        qr_size = int(h * tpl["qr_size_pct"] / 100) if show_qr else 0
+        bar_h = 0
+        bar_w = 0
+        bar_x = 0
+        bar_y = margin
+        qr_size = 0
         qr_x = 0
+        qr_y = margin
+
+        if show_bc:
+            bar_h = int(h * tpl.get("barcode_height_pct", 60) / 100)
+            bar_h = min(bar_h, h - 2 * margin)
+            bar_w = int(w * tpl.get("barcode_width_pct", 90) / 100)
+            bar_w = max(bar_w, 1)
+
         if show_qr:
-            qr_left = tpl["qr_position"] == "left"
-            if qr_left:
-                qr_x = margin
-                text_area_left = qr_x + qr_size + gap
-            else:
-                qr_x = w - margin - qr_size
-                text_area_left = margin
-            qr_y = max(0, (h - qr_size) // 2)
-            qr_path = self._generate_qr(qr_code, qr_size)
-            qr_img = Image.open(qr_path).resize((qr_size, qr_size), Image.LANCZOS)
-            img.paste(qr_img, (qr_x, qr_y))
-            os.unlink(qr_path)
+            qr_size = int(h * tpl.get("qr_code_size_pct", 40) / 100)
+            qr_size = min(qr_size, h - 2 * margin)
+            qr_size = max(qr_size, 1)
 
-            if not qr_left:
-                text_area_width = w - margin - text_area_left
+        # Center the group (barcode [+ gap + QR]) horizontally
+        group_w = 0
+        if show_bc:
+            group_w += bar_w
+        if show_bc and show_qr:
+            group_w += qr_gap
+        if show_qr:
+            group_w += qr_size
 
-        text_x = text_area_left
-        text_w = text_area_width - gap if show_qr else text_area_width
+        group_x = (w - group_w) // 2
+        content_bottom = margin
 
-        if text_w > 0 and text_area_width > 0:
-            fs_main = max(8, int(h * 0.14 * font_ratio))
-            fs_label = max(8, int(h * 0.10 * font_ratio))
-            font_main = _load_font(fs_main)
-            font_small = _load_font(fs_label) if show_labels else font_main
+        if show_bc:
+            bar_x = group_x
+            self._draw_code128(draw, barcode_data, bar_x, bar_y, bar_w, bar_h)
+            content_bottom = bar_y + bar_h
+            cur_x = bar_x + bar_w
+        else:
+            cur_x = group_x
 
-            if tpl["fields"]:
-                ordered = [(f, fields_dict.get(f, "")) for f in tpl["fields"] if f in fields_dict]
-            else:
-                ordered = list(fields_dict.items())
+        if show_qr:
+            qr_x = cur_x + (qr_gap if show_bc else 0)
+            if show_bc and bar_h > 0:
+                qr_y = bar_y + (bar_h - qr_size) // 2
+            self._draw_qr_code(img, barcode_data, qr_x, qr_y, qr_size)
+            content_bottom = max(content_bottom, qr_y + qr_size)
 
-            items = ordered[:max_f]
-            line_h = max(fs_main + 2, int(h * 0.17 * font_ratio * line_ratio))
-
-            title = tpl.get("title_text", "")
-            start_y = int(h * 0.06)
-
-            if title:
-                ts = max(8, int(h * 0.12 * tpl.get("title_font_scale", 100) / 100))
-                ft = _load_font(ts)
-                tw = draw.textlength(title, ft)
-                tx = text_x
-                if text_align == "center":
-                    tx = text_x + (text_w - tw) // 2
-                elif text_align == "right":
-                    tx = text_x + text_w - tw
-                draw.text((tx, start_y), title, fill=tpl.get("title_color", "#000000"), font=ft)
-                start_y += int(line_h * 0.8)
-
-            for i, (key, value) in enumerate(items):
-                y = start_y + i * line_h
-                if show_labels:
-                    label = f"{key}:"
-                    lw = draw.textlength(label, font_small)
-                    val = str(value)
-                    draw.text((text_x, y), label, fill=tpl["label_color"], font=font_small)
-                    draw.text((text_x + lw + 3, y), val, fill=tpl["text_color"], font=font_main)
-                else:
-                    val = str(value)
-                    draw.text((text_x, y), val, fill=tpl["text_color"], font=font_main)
+        show_text = tpl.get("show_sample_id", True)
+        if show_text and barcode_data:
+            text_y = content_bottom + gap
+            avail_text_h = h - text_y - margin
+            if avail_text_h > 6:
+                fs = max(8, min(int(avail_text_h * 0.9), int(w * 0.15)))
+                font = _load_font(fs)
+                tw = draw.textlength(barcode_data, font)
+                tx = (w - tw) / 2
+                draw.text((tx, text_y), barcode_data, fill=tpl["text_color"], font=font)
 
         return img
 
-    def _generate_qr(self, data, size):
+    def _draw_qr_code(self, img, data, x, y, size):
         import qrcode
         qr = qrcode.QRCode(box_size=2, border=0)
         qr.add_data(data)
         qr.make(fit=True)
-        qr_img = qr.make_image(fill_color="black", back_color="white")
-        path = os.path.join(tempfile.gettempdir(), f"qr_{data}.png")
-        qr_img.save(path)
-        return path
+        qr_img = qr.make_image(fill_color="black", back_color="white").convert("RGB")
+        qr_img = qr_img.resize((size, size), Image.LANCZOS)
+        img.paste(qr_img, (x, y))
+
+    def _draw_code128(self, draw, data, x, y, width, height):
+        import barcode
+        code128 = barcode.get_barcode_class("code128")
+        pattern = code128(data).build()[0]
+
+        total = len(pattern)
+        boundaries = [int(x + i * width / total) for i in range(total + 1)]
+
+        for i, bit in enumerate(pattern):
+            if bit == "1":
+                x1 = boundaries[i]
+                x2 = boundaries[i + 1]
+                if x2 > x1:
+                    draw.rectangle([x1, y, x2 - 1, y + height], fill="black")
 
 
 class ThermalPrinter:

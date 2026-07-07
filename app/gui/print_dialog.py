@@ -64,6 +64,20 @@ class PrintDialog(QDialog):
         self.copies_spin.setValue(1)
         form.addRow("Copies:", self.copies_spin)
 
+        size_w = QHBoxLayout()
+        self.width_spin = QSpinBox()
+        self.width_spin.setRange(20, 200)
+        self.width_spin.setSuffix(" mm")
+        self.width_spin.valueChanged.connect(lambda _: self._update_preview())
+        size_w.addWidget(self.width_spin)
+        size_w.addWidget(QLabel("×"))
+        self.height_spin = QSpinBox()
+        self.height_spin.setRange(10, 150)
+        self.height_spin.setSuffix(" mm")
+        self.height_spin.valueChanged.connect(lambda _: self._update_preview())
+        size_w.addWidget(self.height_spin)
+        form.addRow("Label Size:", size_w)
+
         layout.addWidget(printer_group)
 
         btn_layout = QHBoxLayout()
@@ -105,6 +119,10 @@ class PrintDialog(QDialog):
         host = self.settings.get("printer_host", "192.168.1.100")
         port = self.settings.get("printer_port", "9100")
         self.thermal_host.setText(f"{host}:{port}")
+        from .label_designer import load_template
+        tpl = load_template(self.settings)
+        self.width_spin.setValue(tpl.get("width_mm", 40))
+        self.height_spin.setValue(tpl.get("height_mm", 13))
 
     def _on_mode_change(self):
         is_thermal = self.mode_combo.currentIndex() == 1
@@ -114,8 +132,8 @@ class PrintDialog(QDialog):
     def _update_preview(self):
         from .label_designer import load_template
         tpl = load_template(self.settings) if self.settings else None
-        w = tpl.get("width_mm", 40) if tpl else 40
-        h = tpl.get("height_mm", 13) if tpl else 13
+        w = self.width_spin.value()
+        h = self.height_spin.value()
         self.preview_group.setTitle(f"Preview ({w}×{h}mm)")
         renderer = LabelRenderer(width_mm=w, height_mm=h)
         img = renderer.render(self.qr_code, self.fields_dict, template=tpl)
@@ -139,8 +157,6 @@ class PrintDialog(QDialog):
 
             from .label_designer import load_template
             tpl = load_template(self.settings) if self.settings else None
-            lw = tpl.get("width_mm", 40) if tpl else 40
-            lh = tpl.get("height_mm", 13) if tpl else 13
 
             print_label(
                 qr_code=self.qr_code,
@@ -150,8 +166,8 @@ class PrintDialog(QDialog):
                 host=host,
                 port=port,
                 thermal_copies=copies,
-                label_width_mm=lw,
-                label_height_mm=lh,
+                label_width_mm=self.width_spin.value(),
+                label_height_mm=self.height_spin.value(),
                 label_gap_mm=int(self.settings.get("label_gap_mm", "3")) if self.settings else 3,
                 template=tpl,
             )

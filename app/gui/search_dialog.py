@@ -25,7 +25,7 @@ class SearchWidget(QWidget):
 
         search_layout = QHBoxLayout()
         self.search_input = QLineEdit()
-        self.search_input.setPlaceholderText("Search by QR code or any field value...")
+        self.search_input.setPlaceholderText("Scan barcode or type to search...")
         self.search_input.returnPressed.connect(self._search)
         search_layout.addWidget(self.search_input)
 
@@ -101,6 +101,10 @@ class SearchWidget(QWidget):
             )
             self.results_table.setItem(row, 1, QTableWidgetItem(summary))
             self.results_table.setItem(row, 2, QTableWidgetItem(specimen["created_at"]))
+
+        # Auto-show detail view if a single match was found
+        if query and len(results) == 1:
+            self._show_detail_for_qr(results[0]["qr_code"])
 
     def _scan_qr(self):
         try:

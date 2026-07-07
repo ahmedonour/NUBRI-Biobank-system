@@ -1,7 +1,8 @@
+import os
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
     QLabel, QTableWidget, QTableWidgetItem, QHeaderView,
-    QMessageBox, QSpinBox
+    QMessageBox, QSpinBox, QFileDialog, QProgressDialog, QApplication
 )
 from PyQt5.QtCore import Qt
 from ..database.models import SpecimenModel, ColumnDefinition
@@ -97,6 +98,43 @@ class DatabaseViewWidget(QWidget):
         self.refresh_btn.clicked.connect(self._load)
         nav.addWidget(self.refresh_btn)
 
+        sep = QLabel("  |  ")
+        sep.setStyleSheet("color: #555;")
+        nav.addWidget(sep)
+
+        self.export_btn = QPushButton("Export CSV")
+        self.export_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #ff9800; color: white; padding: 8px 16px;
+                border: none; border-radius: 6px; font-weight: bold;
+            }
+            QPushButton:hover { background-color: #f57c00; }
+        """)
+        self.export_btn.clicked.connect(self._export_csv)
+        nav.addWidget(self.export_btn)
+
+        self.import_btn = QPushButton("Import CSV")
+        self.import_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #9c27b0; color: white; padding: 8px 16px;
+                border: none; border-radius: 6px; font-weight: bold;
+            }
+            QPushButton:hover { background-color: #7b1fa2; }
+        """)
+        self.import_btn.clicked.connect(self._import_csv)
+        nav.addWidget(self.import_btn)
+
+        self.template_btn = QPushButton("Template")
+        self.template_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #607d8b; color: white; padding: 8px 16px;
+                border: none; border-radius: 6px; font-weight: bold;
+            }
+            QPushButton:hover { background-color: #455a64; }
+        """)
+        self.template_btn.clicked.connect(self._download_template)
+        nav.addWidget(self.template_btn)
+
         layout.addLayout(nav)
 
     def _load(self):
@@ -143,6 +181,70 @@ class DatabaseViewWidget(QWidget):
 
     def _on_selection_changed(self):
         self.print_btn.setEnabled(self.table.currentRow() >= 0)
+
+    def _export_csv(self):
+        columns = self.column_def.get_all()
+        if not columns:
+            QMessageBox.information(self, "Info", "No columns defined.")
+            return
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Export to CSV", "biobank_export.csv",
+            "CSV Files (*.csv)")
+        if not path:
+            return
+        try:
+            self.specimen_model.export_to_csv(path, columns)
+            QMessageBox.information(self, "Exported", f"Exported to:\n{path}")
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Export failed:\n{str(e)}")
+
+    def _import_csv(self):
+        columns = self.column_def.get_all()
+        if not columns:
+            QMessageBox.information(self, "Info", "No columns defined.")
+            return
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Import from CSV", "",
+            "CSV Files (*.csv)")
+        if not path:
+            return
+        try:
+            progress = QProgressDialog("Importing...", None, 0, 0, self)
+            progress.setWindowTitle("Importing")
+            progress.setModal(True)
+            progress.show()
+            QApplication.processEvents()
+            imported, errors = self.specimen_model.import_from_csv(path, columns)
+            progress.close()
+            msg = f"Imported {imported} records."
+            if errors:
+                msg += f"\n\nErrors ({len(errors)}):\n" + "\n".join(errors[:5])
+                if len(errors) > 5:
+                    msg += f"\n... and {len(errors)-5} more"
+            QMessageBox.information(self, "Import Complete", msg)
+            self._load()
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Import failed:\n{str(e)}")
+
+    def _download_template(self):
+        columns = self.column_def.get_all()
+        if not columns:
+            QMessageBox.information(self, "Info", "No columns defined.")
+            return
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Save Template CSV", "biobank_template.csv",
+            "CSV Files (*.csv)")
+        if not path:
+            return
+        try:
+            csv_content = SpecimenModel.get_template_csv(columns)
+            with open(path, "w", newline="", encoding="utf-8-sig") as f:
+                f.write(csv_content)
+            QMessageBox.information(self, "Template Saved",
+                                    f"Template saved to:\n{path}\n\n"
+                                    "Fill in the rows and use Import CSV.")
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to save template:\n{str(e)}")
 
     def _print_selected(self):
         row = self.table.currentRow()

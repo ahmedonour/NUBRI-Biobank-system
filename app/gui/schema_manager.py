@@ -4,7 +4,7 @@ from PyQt5.QtWidgets import (
     QDialog, QFormLayout, QLineEdit, QComboBox,
     QCheckBox, QMessageBox, QDialogButtonBox
 )
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, pyqtSignal
 from ..database.models import ColumnDefinition
 
 
@@ -44,7 +44,7 @@ class AddColumnDialog(QDialog):
 
 
 class SchemaManagerWidget(QWidget):
-    schema_changed = object()
+    schema_changed = pyqtSignal()
 
     def __init__(self, db=None):
         super().__init__()
@@ -156,6 +156,7 @@ class SchemaManagerWidget(QWidget):
             try:
                 self.column_def.add(data["name"], data["type"], data["required"])
                 self._load_columns()
+                self.schema_changed.emit()
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"Failed to add column: {str(e)}")
 
@@ -184,6 +185,7 @@ class SchemaManagerWidget(QWidget):
             try:
                 self.column_def.update(col_id, data["name"], data["type"], data["required"])
                 self._load_columns()
+                self.schema_changed.emit()
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"Failed to update column: {str(e)}")
 
@@ -205,6 +207,7 @@ class SchemaManagerWidget(QWidget):
             try:
                 self.column_def.delete(col_id)
                 self._load_columns()
+                self.schema_changed.emit()
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"Failed to delete column: {str(e)}")
 
@@ -216,6 +219,7 @@ class SchemaManagerWidget(QWidget):
         ids[row], ids[row - 1] = ids[row - 1], ids[row]
         self.column_def.reorder(ids)
         self._load_columns()
+        self.schema_changed.emit()
         self.table.selectRow(row - 1)
 
     def _move_down(self):
@@ -226,4 +230,5 @@ class SchemaManagerWidget(QWidget):
         ids[row], ids[row + 1] = ids[row + 1], ids[row]
         self.column_def.reorder(ids)
         self._load_columns()
+        self.schema_changed.emit()
         self.table.selectRow(row + 1)

@@ -144,7 +144,7 @@ class LabelFormWidget(QWidget):
             self.label_created.emit(qr_code)
             QMessageBox.information(
                 self, "Label Created",
-                f"Specimen saved successfully!\nQR Code: {qr_code}"
+                f"Specimen saved successfully!\nSample ID: {qr_code}"
             )
             self.print_btn.setVisible(True)
             self._clear()

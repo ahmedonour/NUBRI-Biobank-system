@@ -56,6 +56,7 @@ class MainWindow(QMainWindow):
 
         self.label_form.label_created.connect(self._on_label_created)
         self.label_form.label_created.connect(lambda _: self.database_view._load())
+        self.schema_manager.schema_changed.connect(lambda: self.label_form.refresh())
         self.setCentralWidget(self.tabs)
 
         self.status_bar = QStatusBar()

@@ -17,8 +17,8 @@ from ..database.connection import DatabaseConnection
 class MainWindow(QMainWindow):
     def __init__(self, db_path=None):
         super().__init__()
-        self.db_path = db_path
         self.db = DatabaseConnection.get_instance(db_path)
+        self.db_path = self.db.db_url
         self.auth = None
         self.web_server = None
 
@@ -63,7 +63,19 @@ class MainWindow(QMainWindow):
         self.setStatusBar(self.status_bar)
         self.status_label = QLabel("Ready")
         self.status_bar.addWidget(self.status_label)
+        self._add_db_status()
         self._update_user_status()
+
+    def _add_db_status(self):
+        if self.db.db_type == 'postgresql':
+            text = "DB: PostgreSQL"
+            color = "#4caf50"
+        else:
+            text = "DB: SQLite (local)"
+            color = "#9e9e9e"
+        self.db_status_label = QLabel(text)
+        self.db_status_label.setStyleSheet(f"color: {color}; font-weight: bold; padding: 0 10px;")
+        self.status_bar.addPermanentWidget(self.db_status_label)
 
     def _update_user_status(self):
         if self.auth and self.auth.is_authenticated:

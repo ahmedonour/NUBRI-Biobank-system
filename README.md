@@ -33,10 +33,12 @@ via a mobile-friendly web interface.
 | **Xprinter Printing** | ESC/POS thermal label printing via network, USB, or serial |
 | **Desktop QR Scanning** | Scan QR codes using a webcam (OpenCV + pyzbar) |
 | **Mobile Web Preview** | Responsive web interface with HTML5 camera QR scanning |
-| **SQLite Auth** | Built-in sign in / sign up — no external server needed |
+| **Dual Database** | SQLite (local, single-PC) or PostgreSQL (shared, multi-PC) |
+| **On-Screen DB Setup** | Enter PostgreSQL URL on first-launch login screen — no CLI needed |
+| **DB Status Indicator** | Shows current database type in the status bar |
 | **Password Hashing** | Passwords safely hashed with SHA-256 + salt |
-| **Fast Search** | SQLite with WAL mode, indexed columns, JSON1 queries |
-| **Google Drive Backup** | Automatic or manual database backup to Google Drive |
+| **Fast Search** | WAL mode (SQLite) or native JSON (PostgreSQL) with indexed columns |
+| **Google Drive Backup** | Automatic or manual database backup (SQLite file or pg_dump) |
 | **Auto-Start** | Web server auto-starts on boot (macOS LaunchAgents) |
 | **GUI Installer** | Step-by-step setup wizard for zero-config installation |
 
@@ -45,30 +47,42 @@ via a mobile-friendly web interface.
 ## System Architecture
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                   Desktop App (PyQt5)                    │
-│  ┌──────────┐  ┌──────────┐  ┌────────┐  ┌───────────┐ │
-│  │ Create   │  │ Search/  │  │Manage  │  │ Settings  │ │
-│  │ Label    │  │ Scan     │  │Columns │  │           │ │
-│  └────┬─────┘  └────┬─────┘  └────┬───┘  └─────┬─────┘ │
-│       │              │              │            │       │
-├───────┴──────────────┴──────────────┴────────────┴──────┤
-│                    Core Modules                         │
-│  ┌──────────┐  ┌──────────┐  ┌────────┐  ┌──────────┐ │
-│  │ Database │  │   QR     │  │Printer │  │  Auth    │ │
-│  │ (SQLite) │  │ (qrcode) │  │(ESC/POS)│  │(SQLite) │ │
-│  │          │  │ (pyzbar) │  │        │  │(hashed) │ │
-│  └────┬─────┘  └──────────┘  └────────┘  └────┬─────┘ │
-│       │                                        │       │
-└───────┴────────────────────────────────────────┴───────┘
-                │                              │
-        ┌───────▼──────┐              ┌────────▼───────┐
-        │   SQLite DB  │              │   Flask Web    │
-        │  biobank.db  │              │   Server :5000 │
-        │  (data +     │              │  (mobile QR    │
-        │   users +    │              │   lookup)      │
-        │   sessions)  │              └────────────────┘
-        └──────────────┘
+                    ┌─────────────────────────────────────────────┐
+                    │            Desktop App (PyQt5)              │
+                    │  ┌──────────┐ ┌──────────┐ ┌─────────────┐ │
+                    │  │ Create   │ │ Search/  │ │  Settings   │ │
+                    │  │ Label    │ │ Scan     │ │  (DB config)│ │
+                    │  └────┬─────┘ └────┬─────┘ └──────┬──────┘ │
+                    │       │             │              │        │
+                    ├───────┴─────────────┴──────────────┴───────┤
+                    │              Core Modules                   │
+                    │  ┌──────────┐ ┌──────────┐ ┌────────────┐ │
+                    │  │ Database │ │   QR     │ │   Auth     │ │
+                    │  │(SQLite or│ │ (qrcode) │ │  (SHA-256) │ │
+                    │  │PostgreSQL)│ │(pyzbar) │ │            │ │
+                    │  └────┬─────┘ └──────────┘ └──────┬─────┘ │
+                    │       │                            │       │
+                    └───────┴────────────────────────────┴───────┘
+                            │              ┌──────────────────────┐
+                    ┌───────▼──────┐       │   Flask Web Server   │
+                    │  SQLite DB   │       │   :5000 (mobile QR   │
+                    │  biobank.db  │       │   lookup)            │
+                    │  (local PC)  │       └──────────────────────┘
+                    └──────────────┘
+
+                    ┌─────────────────────────────────────────────┐
+                    │  OR — PostgreSQL (shared across 3+ PCs)     │
+                    │                                            │
+                    │  ┌──────┐  ┌──────┐  ┌──────┐              │
+                    │  │ PC 1 │  │ PC 2 │  │ PC 3 │              │
+                    │  └──┬───┘  └──┬───┘  └──┬───┘              │
+                    │     └─────────┼─────────┘                  │
+                    │               ▼                             │
+                    │      ┌────────────────┐                     │
+                    │      │  PostgreSQL    │                     │
+                    │      │  Server :5432  │                     │
+                    │      └────────────────┘                     │
+                    └─────────────────────────────────────────────┘
 ```
 
 ---
@@ -100,6 +114,7 @@ All dependencies are listed in `requirements.txt`:
 | `google-api-python-client` | >=2.0.0 | Google Drive backup |
 | `google-auth-httplib2` | >=0.1.0 | Google Drive auth |
 | `google-auth-oauthlib` | >=0.4.0 | Google Drive OAuth |
+| `psycopg2-binary` | >=2.9.0 | PostgreSQL adapter (optional — only needed for shared DB) |
 
 ### External Services (optional)
 
@@ -118,11 +133,16 @@ pip install -r requirements.txt
 # 2. Run the app
 python main.py
 
-# 3. Create your account
+# 3. On first launch — choose your database:
+#    - Enter a PostgreSQL URL for a shared multi-PC database, OR
+#    - Click "Use Local SQLite" for a single-PC setup
+
+# 4. Create your account
 #    Click "Create an account" on the login screen
 ```
 
-That's it. No external servers needed. Everything runs locally.
+- **Single PC**: Use SQLite — no external servers needed. Everything runs locally.
+- **Multi-PC**: Use PostgreSQL — enter the connection URL on first launch, or later in **Settings → Database**.
 
 ---
 
@@ -181,16 +201,48 @@ sudo dnf install zbar           # Fedora
 
 **Windows**: zbar is bundled with `pyzbar` — no extra steps needed.
 
-### 6. Run the Application
+### 6. PostgreSQL Setup (Optional — for Multi-PC Shared Database)
+
+If you want the database shared across multiple PCs, set up a PostgreSQL server:
+
+1. Install PostgreSQL on one machine (or a dedicated server):
+   ```bash
+   # macOS
+   brew install postgresql@16 && brew services start postgresql@16
+
+   # Ubuntu/Debian
+   sudo apt install postgresql && sudo systemctl start postgresql
+
+   # Windows — download from https://postgresql.org
+   ```
+
+2. Create a database and user:
+   ```bash
+   sudo -u postgres psql
+   CREATE DATABASE biobank_db;
+   CREATE USER biobank_user WITH PASSWORD 'your_password';
+   GRANT ALL PRIVILEGES ON DATABASE biobank_db TO biobank_user;
+   \q
+   ```
+
+3. Note the connection URL:
+   ```
+   postgresql://biobank_user:your_password@SERVER_IP:5432/biobank_db
+   ```
+
+4. Ensure the PostgreSQL port (5432) is open on the server's firewall.
+
+### 7. Run the Application
 
 ```bash
 python main.py
 ```
 
 On first run:
-1. The app creates `biobank.db` (SQLite database) automatically
-2. A login dialog appears — click **Create an account** to register
-3. Sign in and start creating specimen labels
+1. A **Database Setup** page appears — enter a PostgreSQL URL to connect to a shared database, or click **Use Local SQLite** for a local setup
+2. The app creates necessary tables automatically (SQLite or PostgreSQL)
+3. A login dialog appears — click **Create an account** to register
+4. Sign in and start creating specimen labels
 
 ---
 
@@ -279,11 +331,25 @@ dependencies (the installer checks this).
 | **Backup** | Enable | Toggle automatic Google Drive backups |
 | **Backup** | Interval | Hours between backups |
 | **Backup** | Credentials | Path to `client_secret.json` from Google Cloud Console |
+| **Database** | PostgreSQL URL | Connection string for shared multi-PC database |
+| **Database** | Connect/Disconnect | Save a PostgreSQL URL (restart required) or switch back to SQLite |
 
 ### Database
 
-The SQLite database is created automatically at `./biobank.db` (or the path
-specified with `--db`). The schema auto-migrates on first run with:
+**SQLite** (default, single-PC): Created automatically at `./biobank.db`.
+Pass a custom path with `--db`:
+```bash
+python main.py --db /path/to/custom.db
+```
+
+**PostgreSQL** (shared, multi-PC): Enter the connection URL on the first-launch
+database setup page, or later in **Settings → Database**. The URL is saved to
+`db_config.json` and used on subsequent launches automatically.
+```bash
+python main.py --db "postgresql://user:password@host:5432/biobank_db"
+```
+
+The schema auto-creates on first run (both SQLite and PostgreSQL):
 - `column_definitions` — dynamic field definitions
 - `specimens` — specimen data with JSON custom fields
 - `users` — user accounts (email + hashed password + salt)
@@ -363,6 +429,25 @@ hostname -I               # Linux
 - Passwords are hashed with SHA-256 + a random salt. They are never stored
   in plain text.
 
+### 8. Database Status Indicator
+
+The status bar at the bottom of the main window shows the current database type:
+
+- **`DB: PostgreSQL`** (green) — connected to a shared PostgreSQL server
+- **`DB: SQLite (local)`** (gray) — using a local SQLite database file
+
+### 9. Multi-PC Deployment (PostgreSQL)
+
+To use the same database on 3+ PCs:
+
+1. **Set up PostgreSQL** on one machine (see [PostgreSQL Setup](#6-postgresql-setup-optional--for-multi-pc-shared-database))
+2. **Build the .exe** with `python build_installer.py` (bundles `psycopg2-binary`)
+3. **Install the .exe** on each PC
+4. **On first launch**, enter the PostgreSQL URL on the database setup page, or
+   go to **Settings → Database** later to configure it
+5. **All 3 PCs** now share the same data in real-time — labels created on one
+   PC are immediately visible on the others
+
 ---
 
 ## Auto-Start on Boot
@@ -400,14 +485,14 @@ NUBRI-Biobank-system/
 │
 ├── app/
 │   ├── database/
-│   │   ├── connection.py       # SQLite connection manager (WAL mode, auto-migrate)
+│   │   ├── connection.py       # Dual SQLite/PostgreSQL connection manager (WAL mode, auto-migrate, db_config.json)
 │   │   ├── models.py           # Specimen CRUD, dynamic columns, settings
 │   │   ├── auth.py             # User auth (signup/login/sessions) with hashed passwords
 │   │   └── backup.py           # Google Drive backup/restore
 │   │
 │   ├── gui/
 │   │   ├── main_window.py      # Tabbed main window + menu + sign out
-│   │   ├── login_dialog.py     # Sign in / Sign up dialog (SQLite auth)
+│   │   ├── login_dialog.py     # Sign in / Sign up with first-launch DB setup page
 │   │   ├── label_form.py       # Dynamic specimen entry form
 │   │   ├── search_dialog.py    # Search + camera QR scanning
 │   │   ├── schema_manager.py   # Add/edit/delete/reorder columns
@@ -436,8 +521,9 @@ NUBRI-Biobank-system/
 - **[PyQt5](https://riverbankcomputing.com/software/pyqt/)** — Cross-platform desktop GUI framework. Provides windows, dialogs, tabs, tables, and all UI components. Chosen over tkinter for its professional look, advanced widgets, and styling capabilities.
 
 ### Database & Auth
-- **SQLite3** (built-in) — Embedded relational database. Zero configuration, no server process needed. WAL mode enables concurrent reads during writes for fast performance. JSON1 extension allows querying dynamic custom fields.
-- **hashlib** (built-in) — SHA-256 password hashing with random salt. No external auth server required — user accounts are stored securely in the local database.
+- **SQLite3** (built-in) — Embedded relational database. Zero configuration, no server process needed. WAL mode enables concurrent reads during writes for fast performance. JSON1 extension allows querying dynamic custom fields. Used by default for single-PC setups.
+- **psycopg2-binary** — PostgreSQL adapter for Python. Required only when using a shared multi-PC database. Provides RealDictCursor for dict-like row access. Bundled in the standalone .exe via PyInstaller.
+- **hashlib** (built-in) — SHA-256 password hashing with random salt. No external auth server required — user accounts are stored securely in the database.
 
 ### QR Codes
 - **[qrcode](https://github.com/lincolnloop/python-qrcode)** — QR code generation. Creates high-quality QR codes with configurable error correction and box size.
@@ -486,5 +572,16 @@ sudo usermod -a -G video $USER
 - Passwords are case-sensitive and require at least 4 characters
 - If you forget your password, delete the `users` table from the database
   (or ask an admin to recreate the account)
+
+### PostgreSQL connection fails
+- Verify the server is running: `pg_isready`
+- Check the URL format: `postgresql://user:password@host:5432/dbname`
+- Ensure port 5432 is open on the server's firewall
+- Test the connection from the client machine: `psql <URL>`
+- If you see `pg_dump not found`, install PostgreSQL client tools for backups
+
+### "Error: tuple indices must be integers or slices, not str"
+- This means SQLite rows are returning as tuples instead of dict-like objects
+- Usually caused by a missing `row_factory = sqlite3.Row` — ensure you're using the latest code from `connection.py`
 
 ---

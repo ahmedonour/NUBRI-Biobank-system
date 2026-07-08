@@ -97,10 +97,11 @@ class AuthManager:
         return token
 
     def validate_session(self, token):
+        now_func = "NOW()" if self.db.db_type == 'postgresql' else "datetime('now')"
         row = self.conn.execute(
-            "SELECT s.*, u.email, u.name FROM sessions s "
-            "JOIN users u ON u.id = s.user_id "
-            "WHERE s.token = ? AND (s.expires_at IS NULL OR s.expires_at > datetime('now'))",
+            f"SELECT s.*, u.email, u.name FROM sessions s "
+            f"JOIN users u ON u.id = s.user_id "
+            f"WHERE s.token = ? AND (s.expires_at IS NULL OR s.expires_at > {now_func})",
             (token,)
         ).fetchone()
         if row:

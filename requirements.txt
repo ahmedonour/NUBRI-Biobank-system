@@ -3,6 +3,8 @@ PyQt5>=5.15.0
 
 # Database
 # (sqlite3 is built-in)
+# For PostgreSQL support (optional):
+psycopg2-binary>=2.9.0
 
 # QR Code / Barcode generation
 qrcode[pil]>=7.3.0

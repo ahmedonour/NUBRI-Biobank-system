@@ -5,6 +5,7 @@ from PyQt5.QtWidgets import (
     QFileDialog, QScrollArea
 )
 from ..database.models import SettingsModel, SpecimenModel
+from ..database.connection import load_db_config, save_db_config
 
 
 class SettingsWidget(QWidget):
@@ -148,6 +149,46 @@ class SettingsWidget(QWidget):
 
         db_group = QGroupBox("Database")
         db_layout = QVBoxLayout(db_group)
+
+        conn_status = "PostgreSQL" if self.db.db_type == 'postgresql' else "SQLite"
+        self.conn_status_label = QLabel(f"Current connection: {conn_status}")
+        self.conn_status_label.setStyleSheet("font-weight: bold; color: #4da6ff;")
+        db_layout.addWidget(self.conn_status_label)
+
+        pg_form = QFormLayout()
+        self.pg_url_input = QLineEdit()
+        self.pg_url_input.setPlaceholderText("postgresql://user:password@host:5432/dbname")
+        pg_form.addRow("PostgreSQL URL:", self.pg_url_input)
+
+        pg_btn_row = QHBoxLayout()
+        self.connect_pg_btn = QPushButton("Connect to PostgreSQL")
+        self.connect_pg_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #4da6ff; color: white; padding: 8px 16px;
+                border: none; border-radius: 6px; font-weight: bold;
+            }
+            QPushButton:hover { background-color: #3d8bd4; }
+        """)
+        self.connect_pg_btn.clicked.connect(self._connect_postgresql)
+        pg_btn_row.addWidget(self.connect_pg_btn)
+
+        self.disconnect_pg_btn = QPushButton("Use SQLite Instead")
+        self.disconnect_pg_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #666; color: white; padding: 8px 16px;
+                border: none; border-radius: 6px; font-weight: bold;
+            }
+            QPushButton:hover { background-color: #555; }
+        """)
+        self.disconnect_pg_btn.clicked.connect(self._disconnect_postgresql)
+        pg_btn_row.addWidget(self.disconnect_pg_btn)
+
+        db_layout.addLayout(pg_form)
+        db_layout.addLayout(pg_btn_row)
+        db_layout.addWidget(QLabel("Changes take effect after restarting the app."))
+
+        db_layout.addSpacing(16)
+
         self.delete_all_btn = QPushButton("Delete All Data")
         self.delete_all_btn.setStyleSheet("""
             QPushButton {
@@ -194,6 +235,11 @@ class SettingsWidget(QWidget):
         self.web_port.setText(all_settings.get("web_port", "5000"))
         self.backup_enabled.setChecked(all_settings.get("backup_enabled", "false") == "true")
         self.backup_interval.setValue(int(all_settings.get("backup_interval_hours", "24")))
+
+        cfg = load_db_config()
+        saved_url = cfg.get("postgresql_url", "")
+        if saved_url:
+            self.pg_url_input.setText(saved_url)
         self._on_printer_mode_change()
 
     def _on_printer_mode_change(self):
@@ -228,6 +274,36 @@ class SettingsWidget(QWidget):
         )
         if path:
             self.credentials_path.setText(path)
+
+    def _connect_postgresql(self):
+        url = self.pg_url_input.text().strip()
+        if not url:
+            QMessageBox.warning(self, "Missing URL", "Enter a PostgreSQL connection URL.")
+            return
+        if not url.startswith("postgresql://"):
+            QMessageBox.warning(self, "Invalid URL", "URL must start with postgresql://")
+            return
+        try:
+            import psycopg2
+            from psycopg2.extras import RealDictCursor
+            conn = psycopg2.connect(url, cursor_factory=RealDictCursor)
+            conn.close()
+        except Exception as e:
+            QMessageBox.critical(self, "Connection Failed", f"Could not connect:\n{e}")
+            return
+        save_db_config({"postgresql_url": url})
+        QMessageBox.information(
+            self, "Saved",
+            "PostgreSQL URL saved. Restart the app to connect."
+        )
+
+    def _disconnect_postgresql(self):
+        save_db_config({})
+        self.pg_url_input.clear()
+        QMessageBox.information(
+            self, "Disconnected",
+            "PostgreSQL configuration removed. Restart the app to use SQLite."
+        )
 
     def _delete_all_data(self):
         reply = QMessageBox.warning(

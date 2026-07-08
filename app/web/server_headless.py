@@ -13,7 +13,7 @@ import argparse
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="NUBRI Biobank Headless Web Server")
-    parser.add_argument("--db", default=None, help="Path to SQLite database")
+    parser.add_argument("--db", default=None, help="Path to SQLite database or PostgreSQL URL")
     parser.add_argument("--port", type=int, default=5000, help="Web server port")
     args = parser.parse_args()
 

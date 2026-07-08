@@ -5,6 +5,7 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QFont
+from ..database.connection import load_db_config, save_db_config
 
 
 class LoginDialog(QDialog):
@@ -31,6 +32,7 @@ class LoginDialog(QDialog):
         self.stack = QStackedWidget()
         layout.addWidget(self.stack)
 
+        self.stack.addWidget(self._db_setup_page())
         self.stack.addWidget(self._login_page())
         self.stack.addWidget(self._signup_page())
 
@@ -40,8 +42,11 @@ class LoginDialog(QDialog):
         self.status_label.setStyleSheet("color: #ef5350; font-size: 12px;")
         layout.addWidget(self.status_label)
 
-    def _style_input(self):
-        return ""
+        cfg = load_db_config()
+        if cfg.get("postgresql_url", "").strip():
+            self.stack.setCurrentIndex(1)
+        else:
+            self.stack.setCurrentIndex(0)
 
     def _style_btn(self, color="#4da6ff"):
         return f"""
@@ -60,6 +65,47 @@ class LoginDialog(QDialog):
         g = max(int(c[2:4], 16) - 30, 0)
         b = max(int(c[4:6], 16) - 30, 0)
         return f"#{r:02x}{g:02x}{b:02x}"
+
+    # ── Database setup page ────────────────────────────────────────────
+
+    def _db_setup_page(self):
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(0, 10, 0, 0)
+
+        subtitle = QLabel("Connect to a shared database")
+        subtitle.setStyleSheet("color: #9e9e9e; font-size: 12px;")
+        subtitle.setAlignment(Qt.AlignCenter)
+        layout.addWidget(subtitle)
+
+        note = QLabel(
+            "Enter your PostgreSQL URL to share data across PCs.\n"
+            "Skip to use a local SQLite database instead."
+        )
+        note.setStyleSheet("color: #757575; font-size: 11px;")
+        note.setAlignment(Qt.AlignCenter)
+        note.setWordWrap(True)
+        layout.addWidget(note)
+        layout.addSpacing(16)
+
+        self.db_url_input = QLineEdit()
+        self.db_url_input.setPlaceholderText("postgresql://user:password@host:5432/dbname")
+        layout.addWidget(self.db_url_input)
+
+        self.connect_db_btn = QPushButton("Connect & Continue")
+        self.connect_db_btn.setStyleSheet(self._style_btn("#4caf50"))
+        self.connect_db_btn.clicked.connect(self._connect_db)
+        layout.addWidget(self.connect_db_btn)
+
+        self.skip_db_btn = QPushButton("Use Local SQLite")
+        self.skip_db_btn.setStyleSheet(
+            "QPushButton { background: none; border: none; color: #9e9e9e; "
+            "font-size: 12px; text-decoration: underline; padding: 5px; }"
+        )
+        self.skip_db_btn.clicked.connect(lambda: self.stack.setCurrentIndex(1))
+        layout.addWidget(self.skip_db_btn, alignment=Qt.AlignCenter)
+
+        return page
 
     # ── Login page ────────────────────────────────────────────────────
 
@@ -94,7 +140,7 @@ class LoginDialog(QDialog):
             "QPushButton { background: none; border: none; color: #4da6ff; "
             "font-size: 12px; text-decoration: underline; padding: 5px; }"
         )
-        self.switch_to_signup_btn.clicked.connect(lambda: self.stack.setCurrentIndex(1))
+        self.switch_to_signup_btn.clicked.connect(lambda: self.stack.setCurrentIndex(2))
         layout.addWidget(self.switch_to_signup_btn, alignment=Qt.AlignCenter)
 
         return page
@@ -141,12 +187,30 @@ class LoginDialog(QDialog):
             "QPushButton { background: none; border: none; color: #4da6ff; "
             "font-size: 12px; text-decoration: underline; padding: 5px; }"
         )
-        self.back_to_login_btn.clicked.connect(lambda: self.stack.setCurrentIndex(0))
+        self.back_to_login_btn.clicked.connect(lambda: self.stack.setCurrentIndex(1))
         layout.addWidget(self.back_to_login_btn, alignment=Qt.AlignCenter)
 
         return page
 
     # ── Actions ───────────────────────────────────────────────────────
+
+    def _connect_db(self):
+        url = self.db_url_input.text().strip()
+        if not url:
+            self.status_label.setText("Enter a PostgreSQL URL or skip to use SQLite.")
+            return
+        if not url.startswith("postgresql://"):
+            self.status_label.setText("URL must start with postgresql://")
+            return
+
+        self.status_label.setText("Testing connection...")
+        self.connect_db_btn.setEnabled(False)
+        QMessageBox.information(
+            self, "Restart Required",
+            "Save the URL and restart the app to switch databases."
+        )
+        save_db_config({"postgresql_url": url})
+        self.accept()
 
     def _login(self):
         email = self.login_email.text().strip()
@@ -201,9 +265,10 @@ class LoginDialog(QDialog):
             self._set_loading(False, "Create Account")
 
     def _set_loading(self, loading, text):
-        if self.stack.currentIndex() == 0:
+        idx = self.stack.currentIndex()
+        if idx == 1:
             self.login_btn.setEnabled(not loading)
             self.login_btn.setText(text)
-        else:
+        elif idx == 2:
             self.signup_btn.setEnabled(not loading)
             self.signup_btn.setText(text)

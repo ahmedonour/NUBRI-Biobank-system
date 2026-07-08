@@ -138,6 +138,7 @@ def build_installer(name=None, clean=False):
         "qrcode", "requests", "flask", "escpos",
         "googleapiclient", "google_auth_oauthlib",
         "pyzbar", "cv2",
+        "psycopg2", "psycopg2.extras",
     ]
     for mod in hidden:
         cmd.extend(["--hidden-import", mod])

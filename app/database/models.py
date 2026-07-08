@@ -16,8 +16,10 @@ class ColumnDefinition:
         return [dict(row) for row in cursor.fetchall()]
 
     def add(self, column_name, column_type="TEXT", is_required=False):
-        cursor = self.conn.execute("SELECT COALESCE(MAX(display_order), -1) + 1 FROM column_definitions")
-        next_order = cursor.fetchone()[0]
+        cursor = self.conn.execute(
+            "SELECT COALESCE(MAX(display_order), -1) + 1 AS next_order FROM column_definitions"
+        )
+        next_order = cursor.fetchone()["next_order"]
         self.conn.execute(
             "INSERT INTO column_definitions (column_name, column_type, display_order, is_required) VALUES (?, ?, ?, ?)",
             (column_name, column_type, next_order, 1 if is_required else 0)
@@ -110,21 +112,37 @@ class SpecimenModel:
 
     def search(self, query, column_name=None):
         like_query = f"%{query}%"
+        db_type = self.db.db_type
         if column_name:
-            sql = """
-                SELECT * FROM specimens
-                WHERE json_extract(custom_fields, ?) LIKE ?
-                ORDER BY created_at DESC
-            """
-            field_path = f"$.\"{column_name}\""
+            if db_type == 'postgresql':
+                sql = """
+                    SELECT * FROM specimens
+                    WHERE custom_fields::json ->> ? LIKE ?
+                    ORDER BY created_at DESC
+                """
+            else:
+                sql = """
+                    SELECT * FROM specimens
+                    WHERE json_extract(custom_fields, ?) LIKE ?
+                    ORDER BY created_at DESC
+                """
+            field_path = f"$.{column_name}" if db_type == 'sqlite' else column_name
             cursor = self.conn.execute(sql, (field_path, like_query))
         else:
-            sql = """
-                SELECT * FROM specimens
-                WHERE qr_code LIKE ?
-                OR custom_fields LIKE ?
-                ORDER BY created_at DESC
-            """
+            if db_type == 'postgresql':
+                sql = """
+                    SELECT * FROM specimens
+                    WHERE qr_code LIKE ?
+                    OR custom_fields::text LIKE ?
+                    ORDER BY created_at DESC
+                """
+            else:
+                sql = """
+                    SELECT * FROM specimens
+                    WHERE qr_code LIKE ?
+                    OR custom_fields LIKE ?
+                    ORDER BY created_at DESC
+                """
             cursor = self.conn.execute(sql, (like_query, like_query))
         results = []
         for row in cursor.fetchall():
@@ -146,8 +164,8 @@ class SpecimenModel:
         return results
 
     def count(self):
-        cursor = self.conn.execute("SELECT COUNT(*) FROM specimens")
-        return cursor.fetchone()[0]
+        cursor = self.conn.execute("SELECT COUNT(*) AS count FROM specimens")
+        return cursor.fetchone()["count"]
 
     def get_all_unpaginated(self):
         cursor = self.conn.execute("SELECT * FROM specimens ORDER BY created_at DESC")
@@ -214,7 +232,10 @@ class SpecimenModel:
 
     def delete_all(self):
         self.conn.execute("DELETE FROM specimens")
-        self.conn.execute("DELETE FROM sqlite_sequence WHERE name='specimens'")
+        if self.db.db_type == 'postgresql':
+            self.conn.execute("ALTER SEQUENCE specimens_id_seq RESTART WITH 1")
+        else:
+            self.conn.execute("DELETE FROM sqlite_sequence WHERE name='specimens'")
         self.conn.commit()
 
 
@@ -229,10 +250,16 @@ class SettingsModel:
         return row["value"] if row else default
 
     def set(self, key, value):
-        self.conn.execute(
-            "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
-            (key, str(value))
-        )
+        if self.db.db_type == 'postgresql':
+            self.conn.execute(
+                "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value",
+                (key, str(value))
+            )
+        else:
+            self.conn.execute(
+                "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+                (key, str(value))
+            )
         self.conn.commit()
 
     def get_all(self):

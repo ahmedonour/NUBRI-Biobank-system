@@ -11,19 +11,14 @@ Usage:
     python main.py --db /path/to/biobank.db
 """
 
-import os
 import sys
 import argparse
 
 
 def main():
     parser = argparse.ArgumentParser(description="NUBRI Biobank Label System")
-    parser.add_argument("--db", "-d", help="Path to SQLite database file (default: ./biobank.db)")
+    parser.add_argument("--db", "-d", help="Path to SQLite database file or PostgreSQL URL (default: ./biobank.db)")
     args = parser.parse_args()
-
-    db_path = args.db
-    if not db_path:
-        db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "biobank.db")
 
     from PyQt5.QtWidgets import QApplication
     from app.gui.main_window import MainWindow
@@ -34,7 +29,7 @@ def main():
     app.setOrganizationName("NUBRI")
     app.setStyleSheet(DARK_QSS)
 
-    window = MainWindow(db_path=db_path)
+    window = MainWindow(db_path=args.db)
     window.show()
 
     sys.exit(app.exec_())

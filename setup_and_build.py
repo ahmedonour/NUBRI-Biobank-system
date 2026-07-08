@@ -190,7 +190,8 @@ def build_exe(python_exe):
     # Hidden imports for PyInstaller
     for mod in ["PIL", "qrcode", "escpos", "flask", "requests",
                 "googleapiclient", "pyzbar", "cv2",
-                "barcode", "barcode.codex"]:
+                "barcode", "barcode.codex",
+                "psycopg2", "psycopg2.extras"]:
         cmd.extend(["--hidden-import", mod])
 
     cmd.append(str(ENTRY_POINT))

@@ -58,31 +58,10 @@ def collect_data_dirs():
     """
     items = []
 
-    # Top-level items
     for entry in ["app", "scripts", "main.py", "requirements.txt"]:
         src = os.path.join(PROJECT_DIR, entry)
         if os.path.exists(src):
             items.append((src, entry))
-
-    # Recursively add everything inside app/ (PyInstaller only adds
-    # directories as empty unless we list their contents explicitly on
-    # some platforms — doing the robust thing):
-    app_src = os.path.join(PROJECT_DIR, "app")
-    if os.path.isdir(app_src):
-        for root, dirs, files in os.walk(app_src):
-            for f in files:
-                fp = os.path.join(root, f)
-                rel = os.path.relpath(fp, PROJECT_DIR)
-                items.append((fp, rel))
-
-    # Same for scripts/
-    scripts_src = os.path.join(PROJECT_DIR, "scripts")
-    if os.path.isdir(scripts_src):
-        for root, dirs, files in os.walk(scripts_src):
-            for f in files:
-                fp = os.path.join(root, f)
-                rel = os.path.relpath(fp, PROJECT_DIR)
-                items.append((fp, rel))
 
     return items
 

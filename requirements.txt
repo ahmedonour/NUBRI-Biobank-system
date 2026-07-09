@@ -1,9 +1,9 @@
-# Core
-PyQt5>=5.15.0
+# Core GUI
+customtkinter>=5.2.0
+Pillow>=9.0.0
 
 # Database
-# (sqlite3 is built-in)
-# For PostgreSQL support (optional):
+# sqlite3 is built-in
 psycopg2-binary>=2.9.0
 
 # QR Code / Barcode generation
@@ -17,13 +17,19 @@ pyzbar>=0.1.9
 # Xprinter Thermal Printer (ESC/POS)
 python-escpos>=3.0
 pyserial>=3.5
-Pillow>=9.0.0
 
-# Web preview server
+# Web preview server (production)
 Flask>=2.0.0
+waitress>=2.1.0
 requests>=2.25.0
 
 # Google Drive backup
 google-api-python-client>=2.0.0
 google-auth-httplib2>=0.1.0
 google-auth-oauthlib>=0.4.0
+
+# System print dialog (optional — enables native OS print dialog)
+PyQt5>=5.15.0
+
+# Packaging
+pyinstaller>=6.0.0

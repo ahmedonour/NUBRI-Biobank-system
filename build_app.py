@@ -1,114 +1,95 @@
 #!/usr/bin/env python3
 """
-Build NUBRI Biobank into a standalone macOS .app bundle using PyInstaller.
+Build NUBRI Biobank into a standalone executable using PyInstaller.
+Now builds from the single-file main.py with customtkinter.
 
 Usage:
-    python build_app.py          # Build the .app
-    python build_app.py --dmg    # Build .app + create DMG
+    python build_app.py                    # Build executable
+    python build_app.py --name "BioBank DB" --icon app.ico
 """
 
-import os
-import sys
-import shutil
-import subprocess
-import platform
+import os, sys, shutil, subprocess, platform
 
-
-APP_NAME = "NUBRI Biobank"
 APP_ENTRY = "main.py"
-ICON_FILE = None  # Optional: path to .icns file
+DEFAULT_NAME = "BioBank DB"
+PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
-def check_pyinstaller():
-    try:
-        import PyInstaller
-        return True
-    except ImportError:
-        return False
-
-
-def build_app():
-    if not check_pyinstaller():
-        print("Installing PyInstaller...")
-        subprocess.check_call([sys.executable, "-m", "pip", "install", "pyinstaller"])
-
-    dist_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dist")
+def build(name=None, icon_path=None):
+    name = name or DEFAULT_NAME
+    dist_dir = os.path.join(PROJECT_DIR, "dist")
     os.makedirs(dist_dir, exist_ok=True)
 
     cmd = [
         sys.executable, "-m", "PyInstaller",
-        "--name", APP_NAME,
-        "--windowed",                   # GUI app, no terminal
-        "--onefile",                    # Single executable inside .app
-        "--add-data", f"app{os.pathsep}app",
+        "--name", name,
+        "--onedir",
+        "--noconfirm",
+        "--clean",
         "--distpath", dist_dir,
         "--workpath", os.path.join(dist_dir, "build"),
         "--specpath", dist_dir,
-        "--clean",
-        "--noconfirm",
     ]
 
-    if ICON_FILE and os.path.exists(ICON_FILE):
-        cmd.extend(["--icon", ICON_FILE])
+    if platform.system() == "Darwin":
+        cmd.append("--windowed")
+    elif platform.system() == "Windows":
+        cmd.append("--noconsole")
 
-    # Hidden imports for PyInstaller
-    for mod in ["PIL", "PIL._tkinter_finder", "qrcode", "escpos", "flask", "requests",
-                 "googleapiclient", "pyzbar", "cv2", "psycopg2", "psycopg2.extras"]:
+    if icon_path and os.path.exists(os.path.join(PROJECT_DIR, icon_path)):
+        abs_icon = os.path.join(PROJECT_DIR, icon_path)
+        cmd.extend(["--icon", abs_icon])
+
+    # Hidden imports for dynamically loaded modules
+    hidden = [
+        "customtkinter",
+        "PIL", "PIL.Image", "PIL.ImageDraw", "PIL.ImageFont", "PIL.ImageTk",
+        "qrcode",
+        "cv2", "pyzbar.pyzbar", "barcode",
+        "psycopg2", "psycopg2.extras",
+        "escpos.printer",
+        "requests",
+        "flask",
+        "waitress",
+        "google.oauth2.credentials",
+        "google_auth_oauthlib.flow",
+        "google.auth.transport.requests",
+        "googleapiclient.discovery",
+        "googleapiclient.http",
+        "PyQt5", "PyQt5.QtWidgets", "PyQt5.QtPrintSupport", "PyQt5.QtGui", "PyQt5.QtCore",
+    ]
+    for mod in hidden:
         cmd.extend(["--hidden-import", mod])
 
     cmd.append(APP_ENTRY)
 
-    print("Building .app bundle...")
-    print(f"  Command: {' '.join(cmd)}")
-    subprocess.check_call(cmd, cwd=os.path.dirname(os.path.abspath(__file__)))
+    print("=" * 60)
+    print(f"  Building: {name}")
+    print(f"  Platform: {platform.system()} {platform.machine()}")
+    print(f"  Icon:     {icon_path or 'default'}")
+    print("=" * 60)
+    print()
+    print("Running PyInstaller...")
+    print()
 
-    app_path = os.path.join(dist_dir, f"{APP_NAME}.app")
-    if os.path.exists(app_path):
-        print(f"\nSuccess! App bundle created at:\n  {app_path}")
-        return app_path
+    subprocess.check_call(cmd, cwd=PROJECT_DIR)
+
+    ext = ".exe" if platform.system() == "Windows" else ""
+    out = os.path.join(dist_dir, f"{name}{ext}")
+    if os.path.exists(out):
+        size = os.path.getsize(out) / (1024 * 1024)
+        print(f"\nSuccess! {size:.1f} MB — {out}")
     else:
-        print("\nBuild failed: .app not found.")
-        return None
-
-
-def create_dmg(app_path):
-    dmg_path = app_path.replace(".app", ".dmg")
-    dmg_dir = os.path.dirname(app_path)
-    app_name = os.path.basename(app_path)
-
-    print(f"Creating DMG: {dmg_path}")
-
-    # Symlink /Applications inside DMG
-    link_target = "/Applications"
-    link_name = "Applications"
-
-    script = f"""
-    tell application "Finder"
-        tell disk "{APP_NAME}"
-            open
-            set current view of container window to icon view
-            set toolbar visible of container window to false
-            set statusbar visible of container window to false
-            set bounds of container window to {{400, 100, 900, 400}}
-            set icon size of icon view options of container window to 80
-            set arrangement of icon view options of container window to not arranged
-            set position of item "{app_name}" of container window to {{100, 100}}
-            set position of item "{link_name}" of container window to {{350, 100}}
-            close
-        end tell
-    end tell
-    """
-
-    subprocess.check_call([
-        "hdiutil", "create", "-volname", APP_NAME, "-srcfolder", dmg_dir,
-        "-ov", "-format", "UDZO", dmg_path
-    ])
-
-    print(f"DMG created: {dmg_path}")
-    return dmg_path
+        print(f"\nBuild failed: {out} not found.")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
-    app_path = build_app()
-    if app_path and "--dmg" in sys.argv and platform.system() == "Darwin":
-        create_dmg(app_path)
+    icon = None
+    name = DEFAULT_NAME
+    for i, arg in enumerate(sys.argv[1:]):
+        if arg == "--name" and i + 2 < len(sys.argv):
+            name = sys.argv[i + 2]
+        elif arg == "--icon" and i + 2 < len(sys.argv):
+            icon = sys.argv[i + 2]
+    build(name=name, icon_path=icon)

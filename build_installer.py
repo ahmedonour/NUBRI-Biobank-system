@@ -115,7 +115,11 @@ def build_installer(name=None, clean=False):
         "PyQt5", "PyQt5.QtCore", "PyQt5.QtWidgets", "PyQt5.QtGui",
         "PIL", "PIL._tkinter_finder",
         "qrcode", "requests", "flask", "escpos",
-        "googleapiclient", "google_auth_oauthlib",
+        "googleapiclient", "googleapiclient.discovery", "googleapiclient.http",
+        "google.auth", "google.auth.transport.requests",
+        "google.oauth2", "google.oauth2.credentials",
+        "google_auth_oauthlib", "google_auth_oauthlib.flow",
+        "google_auth_httplib2",
         "pyzbar", "cv2",
         "psycopg2", "psycopg2.extras",
     ]

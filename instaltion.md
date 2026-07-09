@@ -1,2 +1,0 @@
-pip install pyinstaller
-pyinstaller --onefile --noconsole --add-data "app:app" --add-data "scripts:scripts" --add-data "main.py:." --add-data "requirements.txt:." --hidden-import "PyQt5" --hidden-import "PyQt5.QtCore" --hidden-import "PyQt5.QtWidgets" --hidden-import "PyQt5.QtGui" --hidden-import "PIL" --hidden-import "qrcode" --hidden-import "requests" --hidden-import "flask" --hidden-import "escpos" --hidden-import "googleapiclient" --hidden-import "pyzbar" --hidden-import "cv2" --hidden-import "psycopg2" --hidden-import "psycopg2.extras" --name "NUBRI_Biobank" main.py

@@ -169,6 +169,7 @@ class PrintDialog(QDialog):
                 label_width_mm=self.width_spin.value(),
                 label_height_mm=self.height_spin.value(),
                 label_gap_mm=int(self.settings.get("label_gap_mm", "3")) if self.settings else 3,
+                print_gap_mm=int(self.settings.get("print_gap_mm", "1")) if self.settings else 1,
                 template=tpl,
             )
             QMessageBox.information(self, "Printed", "Label sent to printer.")

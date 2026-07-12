@@ -148,6 +148,7 @@ class DatabaseConnection:
             INSERT OR IGNORE INTO settings (key, value) VALUES ('label_width_mm', '40');
             INSERT OR IGNORE INTO settings (key, value) VALUES ('label_height_mm', '13');
             INSERT OR IGNORE INTO settings (key, value) VALUES ('label_gap_mm', '3');
+            INSERT OR IGNORE INTO settings (key, value) VALUES ('print_gap_mm', '1');
             INSERT OR IGNORE INTO settings (key, value) VALUES ('web_port', '5000');
             INSERT OR IGNORE INTO settings (key, value) VALUES ('backup_enabled', 'false');
             INSERT OR IGNORE INTO settings (key, value) VALUES ('backup_interval_hours', '24');
@@ -258,6 +259,10 @@ class DatabaseConnection:
             """,
             """
             INSERT INTO settings (key, value) VALUES ('label_gap_mm', '3')
+            ON CONFLICT (key) DO NOTHING;
+            """,
+            """
+            INSERT INTO settings (key, value) VALUES ('print_gap_mm', '1')
             ON CONFLICT (key) DO NOTHING;
             """,
             """

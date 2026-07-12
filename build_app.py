@@ -46,6 +46,7 @@ def build(name=None, icon_path=None):
         "PIL", "PIL.Image", "PIL.ImageDraw", "PIL.ImageFont", "PIL.ImageTk",
         "qrcode",
         "cv2", "pyzbar.pyzbar", "barcode",
+        "numpy",
         "psycopg2", "psycopg2.extras",
         "escpos.printer",
         "requests",
@@ -60,6 +61,11 @@ def build(name=None, icon_path=None):
     ]
     for mod in hidden:
         cmd.extend(["--hidden-import", mod])
+
+    # Collect all data/binaries for packages with native extensions
+    collect_all = ["cv2", "barcode", "pyzbar", "PIL", "numpy"]
+    for mod in collect_all:
+        cmd.extend(["--collect-all", mod])
 
     cmd.append(APP_ENTRY)
 

@@ -81,7 +81,16 @@ class SettingsWidget(QWidget):
         self.label_gap.setValue(3)
         gap_row.addWidget(self.label_gap)
         gap_row.addStretch()
-        printer_layout.addRow("Gap between:", gap_row)
+        printer_layout.addRow("Roll gap:", gap_row)
+
+        pgap_row = QHBoxLayout()
+        self.print_gap = QSpinBox()
+        self.print_gap.setRange(0, 20)
+        self.print_gap.setSuffix(" mm")
+        self.print_gap.setValue(1)
+        pgap_row.addWidget(self.print_gap)
+        pgap_row.addStretch()
+        printer_layout.addRow("Multi-copy gap:", pgap_row)
 
         self.design_btn = QPushButton("Design Label Layout")
         self.design_btn.setStyleSheet("""
@@ -231,6 +240,7 @@ class SettingsWidget(QWidget):
         self.label_width.setValue(int(all_settings.get("label_width_mm", "40")))
         self.label_height.setValue(int(all_settings.get("label_height_mm", "13")))
         self.label_gap.setValue(int(all_settings.get("label_gap_mm", "3")))
+        self.print_gap.setValue(int(all_settings.get("print_gap_mm", "1")))
 
         self.web_port.setText(all_settings.get("web_port", "5000"))
         self.backup_enabled.setChecked(all_settings.get("backup_enabled", "false") == "true")
@@ -261,6 +271,7 @@ class SettingsWidget(QWidget):
         self.settings.set("label_width_mm", str(self.label_width.value()))
         self.settings.set("label_height_mm", str(self.label_height.value()))
         self.settings.set("label_gap_mm", str(self.label_gap.value()))
+        self.settings.set("print_gap_mm", str(self.print_gap.value()))
 
         self.settings.set("web_port", self.web_port.text())
         self.settings.set("backup_enabled", "true" if self.backup_enabled.isChecked() else "false")

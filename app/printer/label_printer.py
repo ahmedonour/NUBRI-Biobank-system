@@ -196,7 +196,7 @@ class SystemPrinter:
     def __init__(self, printer_name=None):
         self.printer_name = printer_name
 
-    def print_label(self, img, copies=1, width_mm=50, height_mm=30):
+    def print_label(self, img, copies=1, width_mm=50, height_mm=30, gap_mm=1):
         from PyQt5.QtWidgets import QApplication
         from PyQt5.QtPrintSupport import QPrinter, QPrintDialog
         from PyQt5.QtGui import QPixmap, QPainter
@@ -206,12 +206,22 @@ class SystemPrinter:
         if not app:
             return
 
+        if copies > 1:
+            gap_px = int(gap_mm / 25.4 * 203)
+            total_h = img.height * copies + gap_px * (copies - 1)
+            combined = Image.new("RGB", (img.width, max(1, total_h)), "white")
+            for i in range(copies):
+                y = i * (img.height + gap_px)
+                combined.paste(img, (0, y))
+            total_height_mm = height_mm * copies + gap_mm * (copies - 1)
+            img = combined
+        else:
+            total_height_mm = height_mm
+
         printer = QPrinter(QPrinter.HighResolution)
         printer.setFullPage(True)
-
-        printer.setPaperSize(QSizeF(width_mm, height_mm), QPrinter.Millimeter)
+        printer.setPaperSize(QSizeF(width_mm, total_height_mm), QPrinter.Millimeter)
         printer.setOutputFormat(QPrinter.NativeFormat)
-        printer.setCopyCount(copies)
 
         if self.printer_name:
             printer.setPrinterName(self.printer_name)
@@ -243,7 +253,7 @@ class SystemPrinter:
 def print_label(qr_code, fields_dict, printer_mode="system", printer_name=None,
                 backend="network", host="192.168.1.100", port=9100,
                 thermal_copies=1, label_width_mm=40, label_height_mm=13,
-                label_gap_mm=3, template=None):
+                label_gap_mm=3, template=None, print_gap_mm=1):
     renderer = LabelRenderer(width_mm=label_width_mm, height_mm=label_height_mm)
     img = renderer.render(qr_code, fields_dict, template=template)
 
@@ -255,4 +265,4 @@ def print_label(qr_code, fields_dict, printer_mode="system", printer_name=None,
             tp.disconnect()
     else:
         sp = SystemPrinter(printer_name)
-        sp.print_label(img, copies=thermal_copies, width_mm=label_width_mm, height_mm=label_height_mm)
+        sp.print_label(img, copies=thermal_copies, width_mm=label_width_mm, height_mm=label_height_mm, gap_mm=print_gap_mm)

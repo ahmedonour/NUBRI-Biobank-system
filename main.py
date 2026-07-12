@@ -160,6 +160,7 @@ class DatabaseConnection:
             INSERT OR IGNORE INTO settings (key, value) VALUES ('label_width_mm', '35');
             INSERT OR IGNORE INTO settings (key, value) VALUES ('label_height_mm', '15');
             INSERT OR IGNORE INTO settings (key, value) VALUES ('label_gap_mm', '3');
+            INSERT OR IGNORE INTO settings (key, value) VALUES ('print_gap_mm', '1');
             INSERT OR IGNORE INTO settings (key, value) VALUES ('web_port', '8765');
             INSERT OR IGNORE INTO settings (key, value) VALUES ('backup_enabled', 'false');
             INSERT OR IGNORE INTO settings (key, value) VALUES ('backup_interval_hours', '24');
@@ -204,6 +205,7 @@ class DatabaseConnection:
             "INSERT INTO settings (key, value) VALUES ('label_width_mm', '35') ON CONFLICT (key) DO NOTHING;",
             "INSERT INTO settings (key, value) VALUES ('label_height_mm', '15') ON CONFLICT (key) DO NOTHING;",
             "INSERT INTO settings (key, value) VALUES ('label_gap_mm', '3') ON CONFLICT (key) DO NOTHING;",
+            "INSERT INTO settings (key, value) VALUES ('print_gap_mm', '1') ON CONFLICT (key) DO NOTHING;",
             "INSERT INTO settings (key, value) VALUES ('web_port', '8765') ON CONFLICT (key) DO NOTHING;",
             "INSERT INTO settings (key, value) VALUES ('backup_enabled', 'false') ON CONFLICT (key) DO NOTHING;",
             "INSERT INTO settings (key, value) VALUES ('backup_interval_hours', '24') ON CONFLICT (key) DO NOTHING;",
@@ -769,7 +771,7 @@ class ThermalPrinter:
 def print_label(qr_code, fields_dict, printer_mode="system", printer_name=None,
                 backend="network", host="192.168.1.100", port=9100,
                 thermal_copies=1, label_width_mm=35, label_height_mm=15,
-                label_gap_mm=3, template=None):
+                label_gap_mm=3, template=None, print_gap_mm=1):
     renderer = LabelRenderer(width_mm=label_width_mm, height_mm=label_height_mm)
     img = renderer.render(qr_code, fields_dict, template=template)
     if printer_mode == "thermal":
@@ -789,8 +791,20 @@ def print_label(qr_code, fields_dict, printer_mode="system", printer_name=None,
                 app = QApplication([])
             printer = QPrinter(QPrinter.HighResolution)
             printer.setFullPage(True)
-            printer.setPaperSize(QSizeF(label_width_mm, label_height_mm), QPrinter.Millimeter)
-            printer.setCopyCount(thermal_copies)
+            if thermal_copies > 1:
+                dpi = 203
+                gap_px = int(print_gap_mm / 25.4 * dpi)
+                total_h = img.height * thermal_copies + gap_px * (thermal_copies - 1)
+                combined = Image.new("RGB", (img.width, max(1, total_h)), "white")
+                for i in range(thermal_copies):
+                    y = i * (img.height + gap_px)
+                    combined.paste(img, (0, y))
+                img = combined
+                page_height_mm = label_height_mm * thermal_copies + print_gap_mm * (thermal_copies - 1)
+            else:
+                page_height_mm = label_height_mm
+
+            printer.setPaperSize(QSizeF(label_width_mm, page_height_mm), QPrinter.Millimeter)
             if printer_name:
                 printer.setPrinterName(printer_name)
             dialog = QPrintDialog(printer)
@@ -1468,6 +1482,7 @@ class LabelFormWidget(ctk.CTkFrame):
                 label_height_mm=int(s.get("label_height_mm", "15")),
                 label_gap_mm=int(s.get("label_gap_mm", "3")),
                 template=tpl,
+                print_gap_mm=int(s.get("print_gap_mm", "1")),
             )
             messagebox.showinfo("Printed", "Label saved and sent to printer.")
             self._clear()
@@ -1513,7 +1528,6 @@ class SearchWidget(ctk.CTkFrame):
         self._search_input.grid(row=0, column=0, sticky="w", padx=(0, 4))
         self._search_input.bind("<Return>", lambda e: self._search())
         ctk.CTkButton(sf, text="Search", width=80, command=self._search).grid(row=0, column=1, padx=2)
-        ctk.CTkButton(sf, text="Scan QR", width=100, fg_color="#4caf50", hover_color="#43a047", command=self._scan_qr).grid(row=0, column=2, padx=(2, 0))
 
         self._table = SimpleTable(self, ["QR Code", "Details", "Created"], select_cb=self._on_select)
         self._table.grid(row=2, column=0, sticky="nsew", padx=5, pady=5)
@@ -2127,6 +2141,8 @@ class PrintDialog(ctk.CTkToplevel):
                 host=host, port=port, thermal_copies=copies,
                 label_width_mm=int(self.settings.get("label_width_mm","40")) if self.settings else 40,
                 label_height_mm=int(self.settings.get("label_height_mm","13")) if self.settings else 13,
+                label_gap_mm=int(self.settings.get("label_gap_mm","3")) if self.settings else 3,
+                print_gap_mm=int(self.settings.get("print_gap_mm","1")) if self.settings else 1,
                 template=tpl,
             )
             messagebox.showinfo("Printed", "Label sent to printer.")
@@ -2178,6 +2194,11 @@ class SettingsWidget(ctk.CTkScrollableFrame):
         self._lh.pack(side="left")
         self._gap = ctk.CTkEntry(sz, width=60, placeholder_text="3")
         self._gap.pack(side="left", padx=(20, 0))
+        pgap = ctk.CTkFrame(pg, fg_color="transparent")
+        pgap.pack(fill="x", padx=10, pady=2)
+        ctk.CTkLabel(pgap, text="Multi-copy gap (mm):").pack(side="left", padx=(0, 6))
+        self._print_gap = ctk.CTkEntry(pgap, width=60, placeholder_text="1")
+        self._print_gap.pack(side="left")
 
         ctk.CTkButton(pg, text="Design Label Layout", fg_color="#ff9800", hover_color="#f57c00", command=self._open_designer).pack(anchor="w", padx=10, pady=4)
 
@@ -2236,6 +2257,7 @@ class SettingsWidget(ctk.CTkScrollableFrame):
         self._lw.insert(0, s.get("label_width_mm", "35"))
         self._lh.insert(0, s.get("label_height_mm", "15"))
         self._gap.insert(0, s.get("label_gap_mm", "3"))
+        self._print_gap.insert(0, s.get("print_gap_mm", "1"))
         self._web_port.insert(0, s.get("web_port", "8765"))
         self._backup_enabled.select() if s.get("backup_enabled") == "true" else None
         self._backup_interval.insert(0, s.get("backup_interval_hours", "24"))
@@ -2261,6 +2283,7 @@ class SettingsWidget(ctk.CTkScrollableFrame):
         self.settings_model.set("label_width_mm", self._lw.get() or "35")
         self.settings_model.set("label_height_mm", self._lh.get() or "15")
         self.settings_model.set("label_gap_mm", self._gap.get() or "3")
+        self.settings_model.set("print_gap_mm", self._print_gap.get() or "1")
         self.settings_model.set("web_port", self._web_port.get() or "8765")
         self.settings_model.set("backup_enabled", "true" if self._backup_enabled.get() else "false")
         self.settings_model.set("backup_interval_hours", self._backup_interval.get() or "24")

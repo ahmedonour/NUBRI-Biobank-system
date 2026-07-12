@@ -216,7 +216,7 @@ class DatabaseConnection:
             "CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);",
         ]
         for s in stmts:
-            self._conn.execute(s.strip())
+            self.execute(s.strip())
         self._conn.commit()
 
 
@@ -1174,7 +1174,7 @@ class LoginDialog(ctk.CTkToplevel):
         self._status.grid(row=2, column=0, pady=(0, 15))
 
         cfg = load_db_config()
-        self._show_page(0 if cfg.get("postgresql_url","").strip() else 1)
+        self._show_page(0 if "postgresql_url" not in cfg else 1)
 
     def _show_page(self, idx):
         for i, p in enumerate(self._page_frames):
@@ -1188,7 +1188,7 @@ class LoginDialog(ctk.CTkToplevel):
         self._db_url = ctk.CTkEntry(f, placeholder_text="postgresql://user:password@host:5432/dbname")
         self._db_url.pack(fill="x", pady=(15, 8))
         ctk.CTkButton(f, text="Connect & Continue", fg_color="#4caf50", hover_color="#43a047", command=self._connect_db).pack(fill="x", pady=5)
-        ctk.CTkButton(f, text="Use Local SQLite", fg_color="transparent", hover_color="#333", text_color="#9e9e9e", command=lambda: self._show_page(1)).pack(pady=5)
+        ctk.CTkButton(f, text="Use Local SQLite", fg_color="transparent", hover_color="#333", text_color="#9e9e9e", command=self._use_sqlite).pack(pady=5)
         return f
 
     def _login_page(self):
@@ -1241,6 +1241,10 @@ class LoginDialog(ctk.CTkToplevel):
         save_db_config({"postgresql_url": url})
         messagebox.showinfo("Restart Required", "Save the URL and restart the app to switch databases.")
         self.destroy()
+
+    def _use_sqlite(self):
+        save_db_config({"postgresql_url": ""})
+        self._show_page(1)
 
     def _login(self):
         email = self._l_email.get().strip()
@@ -2309,7 +2313,7 @@ class SettingsWidget(ctk.CTkScrollableFrame):
         messagebox.showinfo("Saved", "PostgreSQL URL saved. Restart the app.")
 
     def _disconnect_pg(self):
-        save_db_config({})
+        save_db_config({"postgresql_url": ""})
         self._pg_url.delete(0, "end")
         messagebox.showinfo("Disconnected", "PostgreSQL removed. Restart to use SQLite.")
 
@@ -2389,7 +2393,7 @@ class MainWindow(ctk.CTk):
         self._settings.pack(fill="both", expand=True)
 
         # Status bar
-        sb = ctk.CTkFrame(self, fg_color="#2b2b2b", height=28)
+        sb = ctk.CTkFrame(self, fg_color="#2b2b2b", height=32)
         sb.grid(row=1, column=0, sticky="ew")
         sb.grid_columnconfigure(0, weight=1)
         self._status = ctk.CTkEntry(sb, state="readonly", fg_color="#2b2b2b", text_color="#e0e0e0", border_width=0)
@@ -2399,6 +2403,7 @@ class MainWindow(ctk.CTk):
         ctk.CTkLabel(sb, text=db_text, text_color=db_color, font=("", 11, "bold")).grid(row=0, column=1, sticky="e", padx=8)
         if self.auth and self.auth.is_authenticated:
             ctk.CTkLabel(sb, text=f"Signed in: {self.auth.get_user_name()}", text_color="#4caf50", font=("", 11)).grid(row=0, column=2, sticky="e", padx=8)
+        ctk.CTkButton(sb, text="Logout", command=self._sign_out, fg_color="#c62828", hover_color="#b71c1c", font=("", 11), width=70, height=22).grid(row=0, column=3, sticky="e", padx=(4, 8))
 
     def _setup_menu_bar(self):
         import tkinter as tk
@@ -2443,7 +2448,6 @@ class MainWindow(ctk.CTk):
                 self.web_server = None
             self.destroy()
             MainWindow(db_path=self.db_path)
-            self.quit()
 
     def _start_web_server(self):
         try:

@@ -2341,7 +2341,14 @@ class SettingsWidget(ctk.CTkScrollableFrame):
 class MainWindow(ctk.CTk):
     def __init__(self, db_path=None):
         super().__init__()
-        self.db = DatabaseConnection.get_instance(db_path)
+        try:
+            self.db = DatabaseConnection.get_instance(db_path)
+        except Exception as e:
+            messagebox.showerror("Database Error",
+                f"Could not connect to PostgreSQL:\n{e}\n\nFalling back to local SQLite. "
+                "Fix the IP address in Settings and reconnect.")
+            save_db_config({"postgresql_url": ""})
+            self.db = DatabaseConnection.get_instance()
         self.db_path = self.db.db_url
         self.auth = None
         self.web_server = None

@@ -14,6 +14,8 @@ import qrcode
 from tkinter import messagebox, filedialog, colorchooser
 
 APP_NAME = "NUBRI Biobank"
+APP_VERSION = "1.0.0"
+GITHUB_REPO = "ahmedonour/NUBRI-Biobank-system"
 FONT_PATHS = [
     "/System/Library/Fonts/Helvetica.ttc",
     "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
@@ -2336,6 +2338,123 @@ class SettingsWidget(ctk.CTkScrollableFrame):
             messagebox.showerror("Backup Failed", str(e))
 
 
+# ── Auto‑Update ──────────────────────────────────────────────────────
+
+def _version_tuple(v):
+    v = v.lstrip("v")
+    parts = []
+    for p in v.split("."):
+        try:
+            parts.append(int(p))
+        except ValueError:
+            parts.append(p)
+    return tuple(parts)
+
+
+def _check_latest_release():
+    import requests
+    try:
+        resp = requests.get(
+            f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest",
+            timeout=10,
+            headers={"Accept": "application/vnd.github.v3+json"}
+        )
+        if resp.status_code != 200:
+            return None, f"GitHub API returned {resp.status_code}"
+        data = resp.json()
+        latest_tag = data.get("tag_name", "").lstrip("v")
+        current = APP_VERSION.lstrip("v")
+        if _version_tuple(latest_tag) > _version_tuple(current):
+            return data, None
+        return None, None
+    except Exception as e:
+        return None, str(e)
+
+
+def _download_release(release_data, progress_cb=None):
+    import requests
+    system = platform.system()
+    asset_name = "BioBank-DB-macOS.zip" if system == "Darwin" else "BioBank-DB-Windows.zip"
+    asset = None
+    for a in release_data.get("assets", []):
+        if a["name"] == asset_name:
+            asset = a
+            break
+    if not asset:
+        raise RuntimeError(f"No {asset_name} in release {release_data.get('tag_name', '?')}")
+
+    temp_dir = tempfile.mkdtemp(prefix="biobank_update_")
+    zip_path = os.path.join(temp_dir, asset_name)
+
+    resp = requests.get(asset["browser_download_url"], stream=True, timeout=300)
+    resp.raise_for_status()
+    total = int(resp.headers.get("content-length", 0))
+    downloaded = 0
+    with open(zip_path, "wb") as f:
+        for chunk in resp.iter_content(chunk_size=8192):
+            f.write(chunk)
+            downloaded += len(chunk)
+            if progress_cb and total:
+                progress_cb(downloaded / total)
+
+    extract_dir = os.path.join(temp_dir, "extracted")
+    os.makedirs(extract_dir, exist_ok=True)
+    with zipfile.ZipFile(zip_path, "r") as zf:
+        zf.extractall(extract_dir)
+
+    return temp_dir, extract_dir
+
+
+def _create_updater_and_exit(extract_dir):
+    system = platform.system()
+    temp_dir = tempfile.gettempdir()
+
+    if system == "Darwin":
+        # Find the current .app bundle
+        app_bundle = sys.executable
+        while app_bundle and not app_bundle.endswith(".app"):
+            parent = os.path.dirname(app_bundle)
+            if parent == app_bundle:
+                break
+            app_bundle = parent
+        if not app_bundle or not app_bundle.endswith(".app"):
+            raise RuntimeError("Could not locate .app bundle")
+
+        new_app = os.path.join(extract_dir, "BioBank DB.app")
+        script = (
+            "#!/bin/bash\n"
+            f'sleep 2\n'
+            f'rm -rf "{app_bundle}"\n'
+            f'cp -R "{new_app}" "{os.path.dirname(app_bundle)}"\n'
+            f'open "{app_bundle}"\n'
+            f'rm -rf "{os.path.dirname(extract_dir)}"\n'
+        )
+        script_path = os.path.join(temp_dir, "biobank_updater.sh")
+        with open(script_path, "w") as f:
+            f.write(script)
+        os.chmod(script_path, 0o755)
+        subprocess.Popen(["bash", script_path])
+    else:
+        # Windows
+        app_dir = os.path.dirname(sys.executable)
+        new_dir = os.path.join(extract_dir, "BioBank DB")
+        script = (
+            '@echo off\n'
+            f'timeout /t 3 /nobreak >nul\n'
+            f'rmdir /s /q "{app_dir}"\n'
+            f'mkdir "{app_dir}"\n'
+            f'xcopy /e /i /y "{new_dir}\\*" "{app_dir}\\"\n'
+            f'start "" "{app_dir}\\BioBank DB.exe"\n'
+            f'rmdir /s /q "{os.path.dirname(extract_dir)}"\n'
+        )
+        script_path = os.path.join(temp_dir, "biobank_updater.bat")
+        with open(script_path, "w") as f:
+            f.write(script)
+        subprocess.Popen([script_path], shell=True)
+
+    sys.exit(0)
+
+
 # ── Main Window ─────────────────────────────────────────────────────
 
 class MainWindow(ctk.CTk):
@@ -2427,6 +2546,7 @@ class MainWindow(ctk.CTk):
         mb.add_cascade(label="Tools", menu=tools_menu)
 
         help_menu = tk.Menu(mb, tearoff=0, bg="#2b2b2b", fg="#e0e0e0", activebackground="#333", activeforeground="#4da6ff")
+        help_menu.add_command(label="Check for Updates", command=self._check_updates)
         help_menu.add_command(label="About", command=self._show_about)
         mb.add_cascade(label="Help", menu=help_menu)
 
@@ -2444,7 +2564,56 @@ class MainWindow(ctk.CTk):
         self._set_status("Forms refreshed")
 
     def _show_about(self):
-        messagebox.showinfo("About", "NUBRI Biobank Label System v1.0\n\nDesktop app for biobank specimen labels with QR codes.")
+        messagebox.showinfo("About", f"NUBRI Biobank Label System v{APP_VERSION}\n\nDesktop app for biobank specimen labels with QR codes.")
+
+    def _check_updates(self):
+        data, err = _check_latest_release()
+        if err:
+            messagebox.showerror("Update Check Failed", f"Could not check for updates:\n{err}")
+            return
+        if data is None:
+            messagebox.showinfo("Up to Date", f"You are running v{APP_VERSION}.\nNo updates available.")
+            return
+
+        tag = data.get("tag_name", "?")
+        body = data.get("body", "No release notes.")
+        notes = body.strip()[:500]
+        msg = (
+            f"New version {tag} is available!\n"
+            f"You have: v{APP_VERSION}\n\n"
+            f"Release notes:\n{notes}\n\n"
+            "Download and install now?"
+        )
+        if not messagebox.askyesno("Update Available", msg):
+            return
+
+        dlg = ctk.CTkToplevel(self)
+        dlg.title("Downloading Update")
+        dlg.geometry("400x120")
+        dlg.transient(self)
+        dlg.grab_set()
+        ctk.CTkLabel(dlg, text=f"Downloading {tag}...", font=("", 13)).pack(pady=(15, 5))
+        bar = ctk.CTkProgressBar(dlg, width=320)
+        bar.pack(pady=10)
+        bar.set(0)
+        lbl = ctk.CTkLabel(dlg, text="")
+        lbl.pack()
+
+        def _progress(fraction):
+            bar.set(fraction)
+            lbl.configure(text=f"{int(fraction * 100)}%")
+            dlg.update()
+
+        def _do():
+            try:
+                _, extract_dir = _download_release(data, progress_cb=_progress)
+                dlg.destroy()
+                _create_updater_and_exit(extract_dir)
+            except Exception as e:
+                dlg.destroy()
+                messagebox.showerror("Update Failed", str(e))
+
+        threading.Thread(target=_do, daemon=True).start()
 
     def _sign_out(self):
         if messagebox.askyesno("Sign Out", "Are you sure?"):
